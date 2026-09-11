@@ -173,12 +173,13 @@ The script needs to know its reviewer: pass `--reviewer <name>` from the table a
 ### Start (`/review-bot watch`)
 
 1. Open your CLI in the checkout you want to watch. Prefer `main`, not a feature worktree.
-2. Start the watcher with the resolved reviewer name (see Invocation):
+2. Start the watcher with the resolved reviewer name (see Invocation). Default cadence is every 3 minutes: each fire wakes the model and re-reads session context, so cadence sets watch cost almost linearly (measured on Muse: ~24M mostly-cached input + ~55k output/hour at 30s cadence; a single 3-minute job cuts that ~6x). Poll faster only when pickup latency matters. Cron minimum is 1 minute — sub-minute needs two offset jobs (e.g. a second job that sleeps 30s first); the pair is one logical watcher sharing one `seen.json`, so offsets must exceed poll duration and each fire must still honor in-flight state.
    - Grok: run the script with `--reviewer grok --poll-interval 30` in the `monitor` tool with `persistent: true` (one monitor only). Do not run `--once` in this session while that monitor is up. `/rename review-bot` and leave the session idle.
-   - Claude Code: `CronCreate` with `cron: "* * * * *"` and a prompt that runs the `--once` poll below, then starts a run per Orchestrator on each `ACTION_REQUIRED` line. Jobs are session-only (gone when the session exits), fire only while the REPL is idle, and recurring ones auto-expire after 7 days — re-create it when you restart the session.
-   - Cursor: `/loop 1m In <checkout>, run python3 ~/.agents/skills/review-bot/scripts/watch-review.py --reviewer cursor --once; for each ACTION_REQUIRED line, follow Orchestrator.` Keep the session open.
-   - Codex: run `/loop 1m In <checkout>, run python3 ~/.agents/skills/review-bot/scripts/watch-review.py --reviewer codex --once; for each ACTION_REQUIRED line, follow Orchestrator.` Keep the session open.
-   - Any other CLI: schedule `--once` every minute (cron, `launchd`, or your scheduler of choice):
+   - Muse: `muse.cron_create` with `cron: "1-59/3 * * * *"` and a short prompt that runs the `--once` poll below, then starts a run per Orchestrator on each `ACTION_REQUIRED` line. Recurring jobs auto-expire after 7 days.
+   - Claude Code: `CronCreate` with `cron: "1-59/3 * * * *"` and a prompt that runs the `--once` poll below, then starts a run per Orchestrator on each `ACTION_REQUIRED` line. Jobs are session-only (gone when the session exits), fire only while the REPL is idle, and recurring ones auto-expire after 7 days — re-create it when you restart the session.
+   - Cursor: `/loop 3m In <checkout>, run python3 ~/.agents/skills/review-bot/scripts/watch-review.py --reviewer cursor --once; for each ACTION_REQUIRED line, follow Orchestrator.` Keep the session open.
+   - Codex: run `/loop 3m In <checkout>, run python3 ~/.agents/skills/review-bot/scripts/watch-review.py --reviewer codex --once; for each ACTION_REQUIRED line, follow Orchestrator.` Keep the session open.
+   - Any other CLI: schedule `--once` every 3 minutes (cron, `launchd`, or your scheduler of choice):
 
 ```bash
 cd <checkout> && python3 ~/.agents/skills/review-bot/scripts/watch-review.py \
@@ -188,3 +189,4 @@ cd <checkout> && python3 ~/.agents/skills/review-bot/scripts/watch-review.py \
 
 (`muse` above is an example — use the resolved reviewer name.) The repo is parsed from the `origin` remote of the cwd — run from the checkout you want to watch (`--repo owner/name` overrides auto-detect, `--repo-dir <path>` resolves origin elsewhere). The author defaults to the `gh`-authenticated login (`--author <login>` overrides). `--once` does one poll and exits 0; with existing state it prints `ACTION_REQUIRED` JSON for new trigger comments. Without `--once` the script polls forever (only useful while the session stays alive).
 3. When a poll prints `ACTION_REQUIRED`, start a run per the Orchestrator section (its `reviewer` field is `REVIEWER`, its `repo` field is the target repo). Manual one-shot: `/review-bot 4345`.
+4. Quiet polls stay quiet. No `ACTION_REQUIRED` → the entire reply is one line: the poll result plus in-flight state (e.g. `Clean — nothing in flight.`). Then stop. Keep the scheduled prompt itself short too — point at this file for the protocol instead of inlining it.
