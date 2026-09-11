@@ -33,7 +33,7 @@ Only the watcher owner can fire it. That defaults to the `gh`-authenticated logi
 
 ## Watch
 
-Open your CLI in the checkout you want to watch, preferably `main`. Then `/review-bot watch`.
+Open your CLI in the checkout you want to watch, preferably `main`. Then `/review-bot watch`. Leave the session idle while a review runs so further trigger comments still fire.
 
 The poller needs a reviewer name. Pass `--reviewer` or set `REVIEW_BOT_REVIEWER`. It will not start without one.
 

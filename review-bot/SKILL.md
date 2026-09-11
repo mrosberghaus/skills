@@ -1,6 +1,6 @@
 ---
 name: review-bot
-description: Use when a `/grok review`, `/muse review`, `/claude review`, `/cursor review`, or `/codex review` comment is posted on a pull request in a watched repo, a review-bot watcher emits ACTION_REQUIRED, or the user runs /review-bot.
+description: Use when a `/grok review`, `/muse review`, `/claude review`, `/cursor review`, or `/codex review` comment is posted on a pull request in a watched repo, a review-bot watcher emits ACTION_REQUIRED, a second trigger arrives while a review is already running, or the user runs /review-bot.
 argument-hint: "[watch | <pr-number>] [--reviewer <name>]"
 ---
 
@@ -72,23 +72,35 @@ Step 4 is a `finally`. Child crash, empty diff, push failure — still remove th
 
 Keep the main checkout on its current branch. Do the PR work in a child. One-shot (`/review-bot <n>`) has no payload: take the repo from the current checkout's origin; there is no trigger comment, so skip the reactions.
 
+The persistent watcher stays up for the whole session. A child in flight is not a reason to stop the monitor, start a second poller, or ignore `ACTION_REQUIRED`.
+
+After spawning a child, return to idle. Child-done and `ACTION_REQUIRED` are separate wakeups. Do not block the session on the child (no long `get_command_or_subagent_output` / process-wait). Completion arrives as a notification.
+
+Track each in-flight child as `{pr, comment_id, worktree_path}`. Cleanup is per child.
+
 1. React `eyes` on the trigger comment (`<repo>` is the payload's `repo`):
    `gh api repos/<repo>/issues/comments/<id>/reactions -f content=eyes`
-2. Spawn one isolated child for the PR, working in a fresh worktree off the checkout whose origin matches the payload's `repo`. Prompt: the Child section plus PR number, comment id, focus text, repo, and `REVIEWER`.
+2. Spawn one isolated child for the PR, working in a fresh worktree off the checkout whose origin matches the payload's `repo`. Prompt: the Child section plus PR number, comment id, focus text, repo, `REVIEWER`, and this session's watcher checkout (`pwd -P`). The child runs `pwd -P` first and returns `worktree_path`.
    - Grok: `spawn_subagent` with `general-purpose`, `isolation: "worktree"`, `background: true`.
    - Muse: `subagent_spawn` with `worktree_isolation: true` (or a `workflow` child with `isolation: true`).
-   - Claude Code: `Agent` tool with `subagent_type: "general-purpose"`, `isolation: "worktree"` (worktree lands at `.claude/worktrees/agent-<agentId>`). It runs in the background — wait for the completion notification; its `<worktree>` block carries the `worktreePath` and `worktreeBranch` you clean up.
-   - Cursor: start one background `cursor agent -w review-bot-<n> --workspace <checkout> -p --force "<prompt>"` shell process (worktree lands at `~/.cursor/worktrees/<reponame>/review-bot-<n>`); make the child run `pwd -P` first and return it as `worktree_path`, then wait for process exit.
-   - Codex: start one background `codex exec --enable worktrees --worktree --json "<prompt>"` terminal process; make the child run `pwd -P` first and return it as `worktree_path`, then wait on the process with `write_stdin`.
-3. Wait for the child (up to 30 min).
-4. **Leave no worktree.** Use the child's `worktree_path` / worktree id and the Cleanup section. Confirm it is gone.
-5. React `+1` on the trigger comment when the child posted the summary; `confused` if the child failed after you cleaned up.
+   - Claude Code: `Agent` tool with `subagent_type: "general-purpose"`, `isolation: "worktree"` (worktree lands at `.claude/worktrees/agent-<agentId>`). Completion is a notification; its `<worktree>` block carries the `worktreePath` and `worktreeBranch`.
+   - Cursor: start one background `cursor agent -w review-bot-<n> --workspace <checkout> -p --force "<prompt>"` shell process (worktree lands at `~/.cursor/worktrees/<reponame>/review-bot-<n>`).
+   - Codex: start one background `codex exec --enable worktrees --worktree --json "<prompt>"` terminal process.
+3. Isolation holds only when `worktree_path` is set and is a different directory than the watcher checkout. If it is missing or equal: abort that child before it runs `gh pr checkout`, restore the watcher checkout if HEAD moved, react `confused`, and queue the comment until an isolated spawn can succeed.
+4. On child-done: remove **that** child's worktree (Cleanup) and confirm it is gone. Never remove the watcher checkout, even if a child reported that path. React `+1` when the child posted the summary; `confused` if it failed after cleanup.
 
-One PR at a time. A second wakeup waits until the current child's worktree is gone.
+On a new wakeup while a child is running:
+
+| Condition | Action |
+|-----------|--------|
+| same `comment_id` | ignore (already handled) |
+| same PR already in flight | ignore |
+| different PR, isolation can produce a distinct worktree | spawn (steps 1–2) |
+| different PR, isolation would land in the watcher checkout | do not spawn; queue until in-flight children on the watcher checkout are done and parent HEAD is restored |
 
 ## Child
 
-Work only inside the isolated worktree. `REVIEWER` comes from the orchestrator prompt.
+Work only inside the isolated worktree. `REVIEWER` comes from the orchestrator prompt. The prompt includes the watcher checkout path. Run `pwd -P` first. If it equals the watcher checkout, stop immediately and report `isolation_failed` — do not `gh pr checkout`.
 
 1. Attach the PR head without checking it out in the parent:
    ```bash
@@ -146,6 +158,7 @@ Remove the worktree, then confirm it is gone:
 | "Keep it for debug" | Log the path, then remove it. |
 | "git worktree remove is enough" (Grok) | Prefer `grok worktree rm --force` so Grove tracking matches disk. |
 | "Empty review, no worktree needed" | If you created one, remove it. |
+| "Child reported the parent path, remove it" | Never remove the watcher checkout. Isolation failed; restore HEAD if needed. |
 
 Do not `grok worktree gc` or delete other sessions' worktrees.
 
@@ -161,7 +174,7 @@ The script needs to know its reviewer: pass `--reviewer <name>` from the table a
 
 1. Open your CLI in the checkout you want to watch. Prefer `main`, not a feature worktree.
 2. Start the watcher with the resolved reviewer name (see Invocation):
-   - Grok: run the script with `--reviewer grok --poll-interval 30` in the `monitor` tool with `persistent: true` (one monitor only). `/rename review-bot` and leave the session idle.
+   - Grok: run the script with `--reviewer grok --poll-interval 30` in the `monitor` tool with `persistent: true` (one monitor only). Do not run `--once` in this session while that monitor is up. `/rename review-bot` and leave the session idle.
    - Claude Code: `CronCreate` with `cron: "*/3 * * * *"` and a prompt that runs the `--once` poll below, then starts a run per Orchestrator on each `ACTION_REQUIRED` line. Jobs are session-only (gone when the session exits), fire only while the REPL is idle, and recurring ones auto-expire after 7 days — re-create it when you restart the session.
    - Cursor: `/loop 3m In <checkout>, run python3 ~/.agents/skills/review-bot/scripts/watch-review.py --reviewer cursor --once; for each ACTION_REQUIRED line, follow Orchestrator.` Keep the session open.
    - Codex: run `/loop 3m In <checkout>, run python3 ~/.agents/skills/review-bot/scripts/watch-review.py --reviewer codex --once; for each ACTION_REQUIRED line, follow Orchestrator.` Keep the session open.
