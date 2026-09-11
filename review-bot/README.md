@@ -6,17 +6,19 @@ Agent instructions live in [SKILL.md](SKILL.md). This file is for installing the
 
 ## Install
 
+Install globally. Without `-g`, `skills add` writes into the current project.
+
 ```bash
-npx skills add mrosberghaus/skills -s review-bot -y
+npx skills add mrosberghaus/skills -s review-bot -g -y
 ```
 
-That lands at `~/.agents/skills/review-bot/`.
+The CLI prints the destination. Use that path for `watch-review.py`. Examples in this file and in [SKILL.md](SKILL.md) use `~/.agents/skills/review-bot/`. If yours differs, run from the printed path or symlink it there.
 
 The child review needs Superpowers `requesting-code-review` and `receiving-code-review`:
 
 ```bash
-npx skills add obra/superpowers -s requesting-code-review -y
-npx skills add obra/superpowers -s receiving-code-review -y
+npx skills add obra/superpowers -s requesting-code-review -g -y
+npx skills add obra/superpowers -s receiving-code-review -g -y
 ```
 
 `gh` must be authenticated. The poller talks to GitHub through it.
