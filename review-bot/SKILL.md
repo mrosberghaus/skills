@@ -175,10 +175,10 @@ The script needs to know its reviewer: pass `--reviewer <name>` from the table a
 1. Open your CLI in the checkout you want to watch. Prefer `main`, not a feature worktree.
 2. Start the watcher with the resolved reviewer name (see Invocation):
    - Grok: run the script with `--reviewer grok --poll-interval 30` in the `monitor` tool with `persistent: true` (one monitor only). Do not run `--once` in this session while that monitor is up. `/rename review-bot` and leave the session idle.
-   - Claude Code: `CronCreate` with `cron: "*/3 * * * *"` and a prompt that runs the `--once` poll below, then starts a run per Orchestrator on each `ACTION_REQUIRED` line. Jobs are session-only (gone when the session exits), fire only while the REPL is idle, and recurring ones auto-expire after 7 days — re-create it when you restart the session.
-   - Cursor: `/loop 3m In <checkout>, run python3 ~/.agents/skills/review-bot/scripts/watch-review.py --reviewer cursor --once; for each ACTION_REQUIRED line, follow Orchestrator.` Keep the session open.
-   - Codex: run `/loop 3m In <checkout>, run python3 ~/.agents/skills/review-bot/scripts/watch-review.py --reviewer codex --once; for each ACTION_REQUIRED line, follow Orchestrator.` Keep the session open.
-   - Any other CLI: schedule `--once` every 2–5 minutes (cron, `launchd`, or your scheduler of choice):
+   - Claude Code: `CronCreate` with `cron: "* * * * *"` and a prompt that runs the `--once` poll below, then starts a run per Orchestrator on each `ACTION_REQUIRED` line. Jobs are session-only (gone when the session exits), fire only while the REPL is idle, and recurring ones auto-expire after 7 days — re-create it when you restart the session.
+   - Cursor: `/loop 1m In <checkout>, run python3 ~/.agents/skills/review-bot/scripts/watch-review.py --reviewer cursor --once; for each ACTION_REQUIRED line, follow Orchestrator.` Keep the session open.
+   - Codex: run `/loop 1m In <checkout>, run python3 ~/.agents/skills/review-bot/scripts/watch-review.py --reviewer codex --once; for each ACTION_REQUIRED line, follow Orchestrator.` Keep the session open.
+   - Any other CLI: schedule `--once` every minute (cron, `launchd`, or your scheduler of choice):
 
 ```bash
 cd <checkout> && python3 ~/.agents/skills/review-bot/scripts/watch-review.py \
