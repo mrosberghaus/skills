@@ -74,9 +74,11 @@ Keep the main checkout on its current branch. Do the PR work in a child. One-sho
 
 The persistent watcher stays up for the whole session. A child in flight is not a reason to stop the monitor, start a second poller, or ignore `ACTION_REQUIRED`.
 
-After spawning a child, return to idle. Child-done and `ACTION_REQUIRED` are separate wakeups. Do not block the session on the child (no long `get_command_or_subagent_output` / process-wait). Completion arrives as a notification.
+With verified wake callbacks, return to idle after spawning a child. Child-done and `ACTION_REQUIRED` are separate wakeups. Without callbacks, an active coordinator must consume both events; ending its turn stops the handoff. Do not block monitoring on a child (no long `get_command_or_subagent_output` / process-wait).
 
 Track each in-flight child as `{pr, comment_id, worktree_path}`. Cleanup is per child.
+
+Persist each received payload and its child record in a dispatch journal beside the watcher state. Record `pending`, `running`, `failed`, `ignored`, or `complete`, plus summary URL and cleanup result. Mark `complete` only after the Done criteria and final reaction. A repeated delivery of the same comment ID leaves its existing record unchanged. A distinct comment ignored because its PR is already in flight gets an `ignored` record with the reason and covering comment ID; it is not a completed review and is not replayed. On restart, reconcile live coordinators and children before resuming unfinished records or accepting new work. `seen.json` records detection, not review completion.
 
 1. React `eyes` on the trigger comment (`<repo>` is the payload's `repo`):
    `gh api repos/<repo>/issues/comments/<id>/reactions -f content=eyes`
@@ -126,7 +128,8 @@ Work only inside the isolated worktree. `REVIEWER` comes from the orchestrator p
 ```markdown
 ## <Reviewer> review
 
-Picked up `/<reviewer> review` from @<author>.
+Picked up `/<reviewer> review` from @<author> (request: <trigger-comment-url>).
+(For one-shot runs: "Requested directly for PR #<n>.")
 (If ad-hoc: "Ad-hoc review only — <name> was unavailable. Install: `npx skills add obra/superpowers -s <name> -y`.")
 
 ### Fixed
@@ -170,16 +173,33 @@ State is per reviewer+repo: `~/.agents/plugin-data/<reviewer>-review/<owner>__<r
 
 The script needs to know its reviewer: pass `--reviewer <name>` from the table above, or export `REVIEW_BOT_REVIEWER=<name>`. It refuses to run without one — a silent default would watch the wrong trigger phrase.
 
+### Verify the handoff before starting
+
+Watch mode needs both a GitHub poller and an agent that handles its output after the interactive turn ends. A running PID, an existing `/loop` skill, or a waiting subagent does not prove that handoff works.
+
+1. Inspect the actual callable tools. Choose a timer/cron tool that submits prompts, or a monitor with an output callback. Use `/loop` only when its required scheduling or `notify_on_output` capability is available.
+2. Verify a harmless scheduled wake reaches the agent while idle. For an active background coordinator, verify a local probe is consumed and recorded after the parent yields. Do not post a test trigger on GitHub.
+3. Run the initial poll and inspect its log for errors. The script can log a poll error and still exit 0; quiet stdout alone is not a clean poll.
+4. Report watch mode active only after the handoff, successful poll, and pending-request recovery are verified. Record the timer/monitor handle or coordinator PID, logs, and stop method.
+
+For Codex without wake tools, use the persistent coordinator in [Codex watch without callbacks](references/codex-watch.md). If no working handoff can be started under the session's permissions, report watch mode unavailable and stop the timer, monitor, coordinator, or poller created during the failed attempt, reconciling its children and cleanup first. Preserve pending records. Do not leave a poller consuming comments without a reviewer.
+
+### Recover an emitted request
+
+Compare the journal with `emit pr=<n> comment_id=<id>` records in watcher logs, including emissions before the journal existed. Skip `complete` and explicitly `ignored` records. For another emitted ID, reconcile any recorded live child first; fetch its comment and PR, verify reviewer, author, and open state, then queue it even if its ID is already in `seen.json`. Do not replay silent-baseline IDs or all seen IDs.
+
+If a crash happened after posting the summary, use its request link to find the existing comment, resume cleanup and the final reaction, and complete the journal record. Reuse the existing summary rather than posting a second one. If prior effects cannot be verified, keep the record pending and report the uncertainty.
+
 ### Start (`/review-bot watch`)
 
 1. Open your CLI in the checkout you want to watch. Prefer `main`, not a feature worktree.
-2. Start the watcher with the resolved reviewer name (see Invocation). Default cadence is every 3 minutes: each fire wakes the model and re-reads session context, so cadence sets watch cost almost linearly (measured on Muse: ~24M mostly-cached input + ~55k output/hour at 30s cadence; a single 3-minute job cuts that ~6x). Poll faster only when pickup latency matters. Cron minimum is 1 minute — sub-minute needs two offset jobs (e.g. a second job that sleeps 30s first); the pair is one logical watcher sharing one `seen.json`, so offsets must exceed poll duration and each fire must still honor in-flight state.
+2. Verify the handoff above, then use the matching recipe with the resolved reviewer name (see Invocation). Default cadence is every 3 minutes: a prompt-submitting scheduler wakes the model and re-reads session context, so cadence sets watch cost almost linearly (measured on Muse: ~24M mostly-cached input + ~55k output/hour at 30s cadence; a single 3-minute job cuts that ~6x). Poll faster only when pickup latency matters. Cron minimum is 1 minute — sub-minute needs two offset jobs (e.g. a second job that sleeps 30s first); the pair is one logical watcher sharing one `seen.json`, so offsets must exceed poll duration and each fire must still honor in-flight state.
    - Grok: run the script with `--reviewer grok --poll-interval 30` in the `monitor` tool with `persistent: true` (one monitor only). Do not run `--once` in this session while that monitor is up. `/rename review-bot` and leave the session idle.
    - Muse: `muse.cron_create` with `cron: "1-59/3 * * * *"` and a short prompt that runs the `--once` poll below, then starts a run per Orchestrator on each `ACTION_REQUIRED` line. Recurring jobs auto-expire after 7 days.
    - Claude Code: `CronCreate` with `cron: "1-59/3 * * * *"` and a prompt that runs the `--once` poll below, then starts a run per Orchestrator on each `ACTION_REQUIRED` line. Jobs are session-only (gone when the session exits), fire only while the REPL is idle, and recurring ones auto-expire after 7 days — re-create it when you restart the session.
    - Cursor: `/loop 3m In <checkout>, run python3 ~/.agents/skills/review-bot/scripts/watch-review.py --reviewer cursor --once; for each ACTION_REQUIRED line, follow Orchestrator.` Keep the session open.
-   - Codex: run `/loop 3m In <checkout>, run python3 ~/.agents/skills/review-bot/scripts/watch-review.py --reviewer codex --once; for each ACTION_REQUIRED line, follow Orchestrator.` Keep the session open.
-   - Any other CLI: schedule `--once` every 3 minutes (cron, `launchd`, or your scheduler of choice):
+   - Codex: when `/loop` has a verified wake mechanism, run `/loop 3m In <checkout>, run python3 ~/.agents/skills/review-bot/scripts/watch-review.py --reviewer codex --once; for each ACTION_REQUIRED line, follow Orchestrator.` Otherwise use [Codex watch without callbacks](references/codex-watch.md).
+   - Any other CLI: schedule a prompt that runs the poll and follows Orchestrator every 3 minutes. OS cron or `launchd` running only the Python poller detects comments but does not invoke a reviewer. The poll command is:
 
 ```bash
 cd <checkout> && python3 ~/.agents/skills/review-bot/scripts/watch-review.py \
@@ -187,6 +207,6 @@ cd <checkout> && python3 ~/.agents/skills/review-bot/scripts/watch-review.py \
   --once
 ```
 
-(`muse` above is an example — use the resolved reviewer name.) The repo is parsed from the `origin` remote of the cwd — run from the checkout you want to watch (`--repo owner/name` overrides auto-detect, `--repo-dir <path>` resolves origin elsewhere). The author defaults to the `gh`-authenticated login (`--author <login>` overrides). `--once` does one poll and exits 0; with existing state it prints `ACTION_REQUIRED` JSON for new trigger comments. Without `--once` the script polls forever (only useful while the session stays alive).
+(`muse` above is an example — use the resolved reviewer name.) The repo is parsed from the `origin` remote of the cwd — run from the checkout you want to watch (`--repo owner/name` overrides auto-detect, `--repo-dir <path>` resolves origin elsewhere). The author defaults to the `gh`-authenticated login (`--author <login>` overrides). `--once` does one poll and exits 0; with existing state it prints `ACTION_REQUIRED` JSON for new trigger comments. Without state, the first poll silently baselines existing triggers; report "Baseline recorded" rather than claiming no reviews are waiting. Handle a request explicitly identified by the user through recovery or a one-shot run. Without `--once` the script polls forever; its output still needs the verified handoff.
 3. When a poll prints `ACTION_REQUIRED`, start a run per the Orchestrator section (its `reviewer` field is `REVIEWER`, its `repo` field is the target repo). Manual one-shot: `/review-bot 4345`.
-4. Quiet polls stay quiet. No `ACTION_REQUIRED` → the entire reply is one line: the poll result plus in-flight state (e.g. `Clean — nothing in flight.`). Then stop. Keep the scheduled prompt itself short too — point at this file for the protocol instead of inlining it.
+4. Quiet, successful polls stay quiet. No `ACTION_REQUIRED` and no pending recovery → the entire reply is one line: the poll result plus in-flight state (e.g. `Clean — nothing in flight.`). End only that scheduled turn; the verified timer/monitor or background coordinator remains active. An active coordinator without wake callbacks keeps consuming events instead of ending its overall turn. Report poll or handoff failures as failures. Keep scheduled prompts short — point at this file for the protocol instead of inlining it.
