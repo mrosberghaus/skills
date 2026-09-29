@@ -9,7 +9,7 @@ argument-hint: "[watch | <pr-number>] [--reviewer <name>]"
 On-demand PR loop for a watched repo: review the diff, fix Critical and Important, tell the author what changed, **leave no worktree**.
 
 **REQUIRED SUB-SKILLS:** requesting-code-review, receiving-code-review. Both must be available where the child runs — source: [obra/superpowers](https://github.com/obra/superpowers/tree/main/skills).
-If a required sub-skill is unavailable, proceed with an ad-hoc review only, disclose the missing sub-skill in the summary, and propose `npx skills add obra/superpowers -s <name> -y` to install it.
+A sub-skill is unavailable only when its `SKILL.md` cannot be read. Then do an ad-hoc review, name the missing skill in the PR comment, and give `npx skills add obra/superpowers -s <name> -y`. If `SKILL.md` was read, follow it. Failing to spawn a nested reviewer is not a missing skill, and that comment must not contain an install line.
 
 Do not merge. Do not approve the PR. Do not fix Minors unless they are one-line and already in a file you are editing.
 
@@ -130,7 +130,6 @@ Work only inside the isolated worktree. `REVIEWER` comes from the orchestrator p
 
 Picked up `/<reviewer> review` from @<author> (request: <trigger-comment-url>).
 (For one-shot runs: "Requested directly for PR #<n>.")
-(If ad-hoc: "Ad-hoc review only — <name> was unavailable. Install: `npx skills add obra/superpowers -s <name> -y`.")
 
 ### Fixed
 - <severity>: <what> (`<sha>` — `<path>`)
