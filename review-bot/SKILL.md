@@ -8,8 +8,8 @@ argument-hint: "[watch | <pr-number>] [--reviewer <name>]"
 
 On-demand PR loop for a watched repo: review the diff, fix Critical and Important, tell the author what changed, **leave no worktree**.
 
-**REQUIRED SUB-SKILLS:** requesting-code-review, receiving-code-review. Both must be available where the child runs — source: [obra/superpowers](https://github.com/obra/superpowers/tree/main/skills).
-A sub-skill is unavailable only when its `SKILL.md` cannot be read. Then do an ad-hoc review, name the missing skill in the PR comment, and give `npx skills add obra/superpowers -s <name> -y`. If `SKILL.md` was read, follow it. Failing to spawn a nested reviewer is not a missing skill, and that comment must not contain an install line.
+**REQUIRED SUB-SKILL:** code-review. It must be available where the child runs — source: [mattpocock/skills](https://github.com/mattpocock/skills).
+The sub-skill is unavailable only when its `SKILL.md` cannot be read. Then do an ad-hoc review, name the missing skill in the PR comment, and give `npx skills add mattpocock/skills -s code-review -g -y`. If `SKILL.md` was read, follow it. Failing to spawn a nested reviewer is not a missing skill, and that comment must not contain an install line.
 
 Do not merge. Do not approve the PR. Do not fix Minors unless they are one-line and already in a file you are editing.
 
@@ -118,8 +118,11 @@ Work only inside the isolated worktree. `REVIEWER` comes from the orchestrator p
    HEAD_SHA=$(git rev-parse HEAD)
    ```
    A stacked PR targets another branch, not `main`, and `origin/main` then drags that base's whole divergence into the range — measured on a real one: 60 files in range against 5 actually changed. The reviewer reports findings in untouched code and step 5 pushes fixes for them. The explicit `+<ref>:refs/remotes/origin/<ref>` refspec matters for the same reason as step 1: a bare `git fetch origin <ref>` writes only `FETCH_HEAD`. Keep the `${BASE_REF}` braces — under zsh, an unbraced `$BASE_REF:refs/...` is parsed as the `:r` modifier and silently fetches a mangled ref.
-3. **REQUIRED:** requesting-code-review against that range. PR title + body are the requirements. Reviewer is read-only.
-4. **REQUIRED:** receiving-code-review on Critical and Important. Verify against this repo before editing. Skip Minors (list them). Push back in the summary when a finding is wrong.
+3. **REQUIRED:** code-review with `$BASE_SHA` as the fixed point. Write the PR title and body to `$(git rev-parse --git-dir)/review-spec.md` (untracked, gone with the worktree) and pass that path as the spec, so the skill never stops to ask for one. Reviewer is read-only. Grade its findings:
+   - **Critical**: Spec (c), a requirement implemented wrong.
+   - **Important**: Spec (a), a requirement missing or partial; a hard violation of a documented standard.
+   - **Minor**: baseline smells and other judgement calls; Spec (b), scope creep, which is the author's call to keep or drop.
+4. Treat each Critical and Important finding as a hypothesis: read the cited code, reproduce behavioural claims, and fix only what holds. A finding that does not hold goes under Skipped / disagreed with the evidence. Skip Minors (list them).
 5. If you changed files: conventional commit, `git push` (or `git push --force-with-lease` only after a rebase you started). Never `--force`. A fork PR without "Allow edits by maintainers" rejects the push — keep the findings, post the comment, and say the push was rejected under Remaining.
 6. Post **one** PR issue comment with `gh pr comment <n> --body-file` (not a formal review). Do not put `/<REVIEWER> review` — or any other CLI's trigger phrase — in that body.
 
