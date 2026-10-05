@@ -14,11 +14,10 @@ npx skills add mrosberghaus/skills -s review-bot -g -y
 
 The CLI prints the destination. Use that path for `watch-review.py`. Examples in this file and in [SKILL.md](SKILL.md) use `~/.agents/skills/review-bot/`. If yours differs, run from the printed path or symlink it there.
 
-The child review needs Superpowers `requesting-code-review` and `receiving-code-review`:
+The child review needs Matt Pocock's `code-review`:
 
 ```bash
-npx skills add obra/superpowers -s requesting-code-review -g -y
-npx skills add obra/superpowers -s receiving-code-review -g -y
+npx skills add mattpocock/skills -s code-review -g -y
 ```
 
 `gh` must be authenticated. The poller talks to GitHub through it.
