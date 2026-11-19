@@ -1,127 +1,72 @@
 ---
 name: council
-description: Use before delegating any research, grill, implement or review work on a task, to pick which models do each phase from the project's .council.toml; for "council run" (attended grill, then unattended spec, tickets, implementation, review and opt-in deploy, using installed workflow skills where present); and when the user says "council" or asks several models to weigh one decision. Skip only for plain questions with no task.
-argument-hint: "[run <idea|issue> | plan | decide <question> | review <PR>]"
+description: Council of models from different providers. Use before delegating research, grill, implement or review work, to staff each phase from .council.toml; for `council run` (grill to deploy); for `council decide` on a tradeoff.
+argument-hint: "[run <idea|issue> | decide <question> | review <PR>]"
 ---
 
 # Council
 
-The council staffs tasks: for each phase (research, grill, implement, review) it picks which models do the work, following the config, then runs them. You (whichever agent runs this skill) are the coordinator: you pick, launch, check and synthesize. You are not a seat.
+You are the **coordinator**: you staff each phase with **seats** (one model each, from distinct providers), brief them, verify what they return, and report. You are never a seat.
 
-**`council run`**: the full pipeline from grill to deploy. Read [pipeline.md](pipeline.md) and follow it; the sections below still define staffing, seats, the brief and the review gate. After the grill, with `hc` and a listed machine, hand off to an unattended coordinator there so the run survives this session: `hc run --bg --on <machine> --outlive-parent --name cr-<slug>-coordinator --cwd <repo> claude --model <[run] coordinator> -- "Use the council skill: council run, resume <spec> after go. Report with hc send <me> at each phase change and when done or stuck."` (needs this skill and the same user config on that machine). Without `hc`, keep coordinating in this session.
+- `council run`: also read [pipeline.md](pipeline.md) and follow it.
+- `[machines]` configured or `hc` installed: read [machines.md](machines.md) before launching.
 
-## 1. Read the config
+## 1. Config
 
-Merge, later wins per key:
+Merge `defaults.toml` (beside this file, documents every key), `~/.config/council/council.toml`, then `<repo>/.council.toml`; later wins per key.
 
-1. `defaults.toml` beside this file
-2. `~/.config/council/council.toml` (user)
-3. `<repo>/.council.toml` (project)
+A seat is `provider` or `provider:model`. The **provider** decides diversity: one seat per provider per phase, and in review the implementer's provider does not count. The **model** decides strength: resolve it through `[seats.<provider>] aliases`, `default` passes no model flag, anything else is a model ID.
 
-Keys per phase: `models` (how many seats; 0 = skip the phase), `prefer` (seat order). A seat is `provider` or `provider:model` (`claude:sonnet`, `codex:gpt-6.2-sol`). The provider counts for `distinct_providers` and `exclude_implementer`; the model only sets strength and cost. Without `:model`, use `[seats.<provider>] model`. Resolve short names through `[seats.<provider>] aliases`; `default` means pass no model flag; anything else passes through as a model ID. Review also: `exclude_implementer`, `max_rounds`, `gate`, `evals`, `final_evals`, `block_on`, `min_score`, `show_score` (see Review gate). `[seats.<provider>] model` pins a model. `[defaults]`: `distinct_providers`, `skip_trivial`. Unknown keys: say so once, ignore them.
+## 2. Staff
 
-## 2. Staff each phase
+Per phase, walk `prefer` and take the first `models` seats that can run. A seat that can't (CLI missing, not signed in, fails to start, in the machine's `skip`) is **absent: <reason>**. A phase short of seats stops here: report which are missing.
 
-For each phase, walk `prefer` and take the first `models` seats that are available on the chosen machine (see Seats). With `distinct_providers`, never two seats of one provider in a phase. Review with `exclude_implementer`: skip the implementer's provider when counting; it may add one extra seat, labeled **same-model review**, which never passes a round alone.
+In review, the implementer's provider may add one **same-model review** seat: its confirmed findings count, its score and approval never do. With `skip_trivial`, a typo-sized task skips research and grill.
 
-If a phase can't be filled, stop and tell the user which seats are missing and why. Never fill it with another model or a duplicate provider silently.
+Done when every phase has its seats. Show the staffing in one table (phase, seats with models, machine) and proceed.
 
-Trivial task (typo, one-liner) with `skip_trivial`: skip research and grill. Review still follows the config.
+## 3. Brief
 
-Show the plan in one table before launching, then proceed without waiting unless something is missing:
-
-```markdown
-| Phase | Seats | Machine |
-| --- | --- | --- |
-| research | Claude Sonnet, Gemini | build-1 |
-| grill | Grok | build-1 |
-| implement | Claude Opus | build-1 |
-| review | Codex, Grok | build-1 |
-```
-
-## 3. Run the phases
-
-- **research**: each seat answers the same research question independently; merge findings, mark where they disagree.
-- **grill**: seats attack the plan or spec: wrong assumptions, missing cases, simpler options. You answer what the code can answer; put only the rest to the user, all at once, before implementing.
-- **implement**: one seat implements. With `models` > 1, each seat works in its own worktree and branch on the same spec; compare by tests and review, keep one, delete the others.
-- **review**: read-only seats return findings (see Review gate). Each round: run `evals`, collect findings, verify each one, fix confirmed ones, re-review with fresh seats. Stop at green or after `max_rounds`; report what remains. Reject feature requests and unrelated refactors as follow-ups.
-
-### Review gate
-
-Each finding from a seat has: severity (`blocker` / `major` / `minor` / `nit`), `file:line`, evidence, suggested fix. You give every finding a verdict against the code: **confirmed**, **rejected** (one-line reason), or **plausible** (can't prove either way; list it, doesn't block). Duplicates across seats merge into one finding.
-
-Green when every entry in `gate` passes:
-
-- `evals`: every command in `evals` exits 0 (run in the implementer's checkout, not by seats). In the round that would turn green, also run `final_evals`.
-- `findings`: no confirmed finding open at a `block_on` severity.
-- `score`: every counting seat scores ≥ `min_score`.
-
-With `show_score`, seats also give N/10; it is reported but gates only when `score` is in `gate`. Same-model review findings count once confirmed (verification is yours), but its score never counts.
-
-Research, grill and review seats are read-only. Only implement seats edit, and only their own worktree.
-
-## Seats
-
-| Provider | Launch (`<task>` = the brief) | Notes |
-| --- | --- | --- |
-| claude | `claude --model <model> --disallowedTools Edit Write NotebookEdit Agent -- "<task>"` | Always pass `--model`. Implement seats drop `--disallowedTools`. Not `--permission-mode plan`: it stops at a plan-approval prompt. |
-| codex | `codex --no-daemon -s read-only [-m <model>] "<task>"` | Implement: `-s workspace-write`. Read-only blocks `hc send`: collect with `hc read`. |
-| grok | `grok [-m <model>] "<task>"` | Read-only by instruction only. First launch in a folder: trust dialog, ask the user to accept (`hc attach <machine>/<name>`). |
-| gemini | `agy --mode auto --sandbox --model <model> -i "<task>"` | Models via `[seats.gemini] aliases` (default `neon` = `gemini-4-neon-high`; `neon-xhigh`, `hydrogen`, `carbon`, `argon`, `flash`); never its Claude/GPT models. Needs auto mode: where `agy` lacks it, every command asks permission, so list `gemini` in that machine's `skip`. |
-
-A seat is unavailable when its CLI is missing, not signed in, fails to start, or is in the machine's `skip`: report **absent: <reason>**.
-
-## Where seats run
-
-From `[machines]` in the config (see `defaults.toml`). Without any entry, everything runs on this machine.
-
-1. **Pick the machine**: among `[machines.<name>]` entries (skip `coordinate_only` ones), check load with `uptime` and cores (`nproc` / `sysctl -n hw.ncpu`), plus `free -g` on Linux. Lower load per core wins. All above ~1 per core: say so and queue.
-2. **All seats of a task on one machine** (shared checkout); the implementer's machine if one exists. Repo at `<repos>/<owner>/<repo>` there; clone if missing.
-3. **A seat in that machine's `skip`** runs on the next machine where it isn't skipped, at the same commit; else it is absent.
-4. **This machine** only when no listed machine is reachable, or the question has no repo.
-
-How seats launch depends on what is installed:
-
-- **`hc`** (persistent terminals, also on other machines): `hc run --bg [--on <machine>] --name <name> --cwd <repo> <launch line>`, then `hc wait --children all` and `hc read --lines 200 <machine>/<name>`. Seats report with `hc send <me>`, where `<me>` is the literal value of `echo $HC_TERMINAL_ID` here, machine-qualified for remote seats (e.g. `laptop/t3`). Never put `$HC_TERMINAL_ID` itself into a brief.
-- **No `hc`**: this machine only. Run each launch line as a background shell command with its output redirected to a file, and read the file when it exits. For non-interactive runs use each CLI's print mode (`claude -p`, `codex exec`, `grok -p`, `agy -p`). Claude seats may instead be the harness's own subagents with the brief as their prompt and the seat's model.
-
-## The brief
-
-Every seat in a phase gets the same brief and nothing else: not this conversation, not another seat's answer.
+Every seat in a phase gets the same brief and nothing else: the independence is the point.
 
 ```text
-You are one <phase> seat on a model council. <Read-only: do not edit files, commit, or start agents. | Implement in this worktree only; do not start agents.>
-
+You are one <phase> seat on a model council. <Read-only: change no files, start no agents. | Implement in this worktree only; start no agents.>
 Task: <one sentence>
-Where to look: <repo, branch/PR, files, symbols>
-Context: <constraints, success criteria, known concerns; compact>
-
-Answer with: position or result; evidence (files/lines checked); biggest risk; what others may miss.<review: instead, a list of findings, each: severity (blocker/major/minor/nit), file:line, evidence, suggested fix. <show_score: then Score N/10.>>
-
-End your final message with the full answer. If `hc` is available, also run: hc send <me> "<seat>: done"
+Where to look: <repo, branch/PR, files>
+Context: <constraints, success criteria, known concerns>
+Answer: position or result; evidence (file:line); biggest risk; what others may miss.
+<review: findings instead, each with severity (blocker/major/minor/nit), file:line, evidence, fix; then Score N/10.>
+End your final message with the full answer.
 ```
 
-If `jg` (Jevgrep) is installed, use it to find **Where to look**; otherwise `rg` and reads.
+Use `jg` to fill **Where to look** when it is installed.
 
-## Decide mode
+## 4. Launch
 
-`council decide <question>`: one round, all available providers (or the user's named seats), read-only, brief as above. Write your own position first. Output one row per seat (position, key reason), then **Consensus**, **Strongest dissent** (always shown), **Premise check**, **Recommendation** with its evidence.
+| Provider | Launch line | Gotcha |
+| --- | --- | --- |
+| claude | `claude --model <model> --disallowedTools Edit Write NotebookEdit Agent -- "<brief>"` | Pass `--model` every time. Implement seats drop `--disallowedTools`. Plan mode stalls on an approval prompt. |
+| codex | `codex --no-daemon -s read-only [-m <model>] "<brief>"` | Implement: `-s workspace-write`. Read-only can't run `hc send`: read its screen. |
+| grok | `grok [-m <model>] "<brief>"` | Read-only only by the brief. Trust dialog on a new folder. |
+| gemini | `agy --mode auto --sandbox --model <model> -i "<brief>"` | Only its Gemini models. Without auto mode every command prompts: `skip` it on that machine. |
 
-## Report
+Without `hc`, run the lines as background processes with output to a file, in print mode (`claude -p`, `codex exec`, `grok -p`, `agy -p`), or run Claude seats as your own subagents.
 
-- On a PR, add to the description (edit it, don't comment), before the model/harness line:
+## 5. Verify
 
-  ```markdown
-  ## Council
+- **research**: merge findings, mark disagreements.
+- **grill**: answer what the code answers; ask the user the rest in one round.
+- **implement** with `models` > 1: one worktree per seat, keep the attempt that wins on tests and review.
+- **review**: give every finding a verdict against the code: **confirmed**, **rejected** (one-line reason) or **plausible** (listed, never blocks). Merge duplicates. Fix confirmed findings, re-review with fresh seats. Feature requests and unrelated refactors become follow-ups.
 
-  Seats: implement Claude Opus · review Codex, Grok (build-1)
+A review is **green** when every entry of `gate` passes: `evals` (every command exits 0, plus `final_evals` in the round that turns green), `findings` (nothing confirmed open at a `block_on` severity), `score` (every counting seat ≥ `min_score`). Done at green or `max_rounds`; then report what remains open.
 
-  | Round | Evals | Blocker | Major | Minor | Nit | Rejected | Scores |
-  | --- | --- | --- | --- | --- | --- | --- | --- |
-  | 1 | 1/2 failing | 1 | 2 | 3 | 1 | 2 | Codex 7, Grok 6 |
-  | 2 | green | 0 | 0 | 1 | 1 | 0 | Codex 9, Grok 9 |
-  ```
+## 6. Report
 
-  Counts are confirmed findings. Drop the Scores column without `show_score`; `absent` / `no score` where it applies; never invent a score.
-- Stop and remove every seat you started (`hc kill` + `hc rm`, or end the background process).
-- Say which machine and model each seat used and which were absent.
+- PR: edit the description, before the model/harness line: a `## Council` section with the seats and one row per round (evals, confirmed findings per severity, rejected, scores). Write `absent` or `no score` where true; every number comes from a seat.
+- Stop every seat you started.
+- Say which machine and model each seat used, and which were absent.
+
+## Decide
+
+`council decide <question>`: one read-only round, every available provider (or the seats the user names). Write your own position first. Then one row per seat, **Consensus**, **Strongest dissent** (always shown), **Premise check**, **Recommendation** with its evidence.
