@@ -50,7 +50,7 @@ Answer: position or result; evidence (file:line); biggest risk; what others may 
 End your final message with the full answer.
 ```
 
-Write the brief to a file outside the repo and pass it as `"$(cat <file>)"`, so quoting can't break it. Done when every seat's brief file exists.
+For a PR, fetch its ref first (`git fetch origin pull/<n>/head:pr-<n>`) so sandboxed seats can read it offline. Give sandboxed seats ticket and spec text inline, since they can't reach the tracker. Write the brief to a file outside the repo and pass it as `"$(cat <file>)"`, so quoting can't break it. Done when every seat's brief file exists.
 
 ## 4. Launch and collect
 
@@ -70,7 +70,7 @@ Done when every seat has returned an answer or is absent.
 - **research**: merge findings, mark disagreements.
 - **grill**: answer what the code answers; ask the user the rest in one round.
 - **implement** with `models` > 1: one worktree per seat; keep the attempt that wins on tests and review, delete the others.
-- **review**: give every finding a verdict against the code: **confirmed**, **rejected** (one-line reason) or **plausible** (reported, non-blocking). Merge duplicates. Who fixes confirmed findings: the run's implementer seat, or for `council review <PR>` a fresh `[implement]` seat when the user asked for fixes, otherwise nobody (report only). Re-review with fresh seats after fixes. Feature requests and unrelated refactors go to the report's **Follow-ups**.
+- **review**: give every finding a verdict against the code: **confirmed**, **rejected** (one-line reason) or **plausible** (reported, non-blocking). Merge duplicates. When the gate is red, who fixes the blocking confirmed findings: the run's implementer seat, or for `council review <PR>` a fresh `[implement]` seat when the user asked for fixes, otherwise nobody (report only). Re-review with fresh seats after fixes. Feature requests and unrelated refactors go to the report's **Follow-ups**.
 
 A review is **green** when every entry of `gate` passes:
 

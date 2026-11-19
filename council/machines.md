@@ -6,10 +6,12 @@
 
 1. Candidates: every listed machine that is not `coordinate_only` and answers `hc exec --on <machine> -- uptime` (this machine: plain `uptime`). No candidate, or no `hc`: this machine, unless it is `coordinate_only`; then report and stop.
 2. Load per core = 1-minute load ÷ cores (`nproc` / `sysctl -n hw.ncpu`). On Linux also `free -g`: under 4 GB available drops the machine.
-3. Pick the lowest load per core among machines whose `skip` excludes none of the providers you will staff; if none qualifies, the lowest one, and its skipped providers are absent.
-4. Every candidate above ~1 per core: tell the user and wait (attended), or retry every 10 minutes for up to an hour and then report (unattended).
+3. Every candidate above ~1 per core: tell the user and wait (attended), or retry every 10 minutes for up to an hour, then report and stop (unattended).
+4. Pick the lowest load per core among machines that can run every provider you will staff; if none can, the lowest one, and the providers in its `skip` are absent.
 
 All seats of a task run on the picked machine: in the current checkout locally, or at `<repos>/<owner>/<repo>` remotely (clone it if missing); implement and merge seats use worktrees of it.
+
+Done when one machine is picked and its checkout is current, or you stopped and reported.
 
 ## hc
 
