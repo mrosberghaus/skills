@@ -6,7 +6,7 @@ The user is present for preflight and grill, and does the retro. From the user's
 
 ## Workflow skills
 
-`[run] workflow = "builtin"`: use the built-in steps below. `"auto"`: for each step, use an installed skill when one matches, else the built-in step; `[run] steps` pins a skill per step key.
+`[run] workflow = "builtin"`: use the built-in steps below. `"auto"`: for each step, take the method from an installed skill when one matches, else the built-in step; the council keeps its permissions, gates and completion criteria either way; `[run] steps` pins a skill per step key.
 
 | Step key | Matches (e.g. Matt Pocock's skills) |
 | --- | --- |
@@ -18,7 +18,7 @@ The user is present for preflight and grill, and does the retro. From the user's
 | `review` | `code-review` (the installed `SKILL.md`) |
 | `pr` | `pr` |
 
-Find a skill in the session's skill list, else as `<dir>/**/<name>/SKILL.md` under `.agents/skills`, `~/.agents/skills`, `.claude/skills`, `~/.claude/skills`, or a plugin's `installPath` in `~/.claude/plugins/installed_plugins.json`. A skill that can't be invoked (e.g. `disable-model-invocation`): read its `SKILL.md` and follow it. For steps that seats execute (prototype, implement, review), put the skill's rules into the brief; seats may have no access to the skill. After **go**, a skill's confirmation prompt counts as approved, except an open product or design question, which goes to `open_questions`.
+Find a skill in the session's skill list, else as `<dir>/**/<name>/SKILL.md` under `.agents/skills`, `~/.agents/skills`, `.claude/skills`, `~/.claude/skills`, or a plugin's `installPath` in `~/.claude/plugins/installed_plugins.json`. A skill that can't be invoked (e.g. `disable-model-invocation`): read its `SKILL.md` and follow it. For steps that seats execute (prototype, implement, review), put the skill's rules into the brief; seats may have no access to the skill. After **go**, a skill's confirmation prompt counts as approved when it asks for an action preflight agreed to; anything beyond that is refused, and an open product or design question goes to `open_questions`.
 
 ## State and tracker
 
@@ -66,7 +66,7 @@ Done when the spec and every ticket, with blockers, are published.
 1. The **frontier** is every open ticket whose blockers are merged. Each frontier ticket gets an `[implement]` seat in its own worktree `<repo>-worktrees/<slug>-<n>` on `ticket/<slug>-<n>`, branched from the current `feature/<slug>`, at most `[implement] parallel` at a time; `[research]` seats explore first when the ticket needs it. The seat writes tests first at the agreed seams and commits; you push the ticket branch (sandboxed seats can't).
 2. `evals` run in the ticket's worktree.
 3. With `[review] per_ticket`, review seats run in the main checkout and read the ticket via `git diff feature/<slug>...ticket/<slug>-<n>` and `git show ticket/<slug>-<n>:<file>`, against the repo's coding standards and the ticket. The implementer seat gets the confirmed findings as a follow-up message (print mode: a fresh seat in the same worktree with the findings and the branch).
-4. Green (with `per_ticket = false`: green `evals`): merges happen one at a time in a dedicated worktree `<repo>-worktrees/<slug>-merge` on `feature/<slug>`. The `[implement] merger` seat (fallback: the first available `[implement]` seat) merges the ticket, runs `evals`, and you push. A conflict it can't resolve, or red evals after the merge: reset the merge worktree to the pushed `feature/<slug>`, then return the ticket to its implementer as another review round. Then close the ticket, remove its worktree, stop its seats, launch the new frontier.
+4. Green (with `per_ticket = false`: green `evals`): merges happen one at a time in a dedicated worktree `<repo>-worktrees/<slug>-merge` on `feature/<slug>`. The `[implement] merger` seat (fallback: the first available `[implement]` seat) merges the ticket, runs `evals`, and you push. A conflict it can't resolve, or red evals after the merge: reset the merge worktree to the pushed `feature/<slug>`, then return the ticket to its implementer as another review round. Once the merge's evals pass and the push succeeds: close the ticket, remove its worktree, stop its seats, launch the new frontier.
 5. At `max_rounds`: label the ticket `needs-info` with its open findings; its dependents wait.
 
 Done when the frontier is empty (every ticket merged, labelled `needs-info`, or blocked by one), and no ticket worktree or seat remains.
@@ -84,8 +84,8 @@ Enter only when every ticket is merged (none labelled `needs-info`), the final g
 Then `[ship]` decides, capped by every cap the run recorded (grill ceiling, not independent review, no CI, no `origin`):
 
 - `merge = "ready"`: mark the PR ready for review.
-- `merge = "auto"`: mark it ready and merge it, except when the diff touches `.council.toml`, CI workflow files, or anything `deploy`/`verify`/`rollback` run, or the door is one-way and `one_way = "ready"`: then mark it ready only.
-- After a merge, on a freshly pulled default branch: `deploy` (`"ci"`: wait for the deploy run; a command: run it), then `verify`. A failed deploy or verify runs `rollback` when set, then go to step 6.
+- `merge = "auto"`: mark it ready and merge it with the reviewed head pinned (`gh pr merge --match-head-commit <reviewed sha>`, or the host's equivalent; a host without one: mark it ready only), except when the diff touches `.council.toml`, CI workflow files, or anything `deploy`/`verify`/`rollback` run, or the door is one-way and `one_way = "ready"`: then mark it ready only.
+- After a merge, on a checkout of the exact merge commit: `deploy` (`"ci"`: wait for the deploy run; a command: run it), then `verify`. A failed deploy or verify runs `rollback` when set, then go to step 6.
 
 A denied merge, push or deploy: go to step 6 and report it.
 

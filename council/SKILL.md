@@ -70,11 +70,11 @@ Done when every seat has returned an answer or is absent.
 - **research**: merge findings, mark disagreements.
 - **grill**: answer what the code answers; ask the user the rest in one round.
 - **implement** with `models` > 1: one worktree per seat; keep the attempt that wins on tests and review, delete the others.
-- **review**: give every finding a verdict against the code: **confirmed**, **rejected** (one-line reason) or **plausible** (reported, non-blocking). Merge duplicates. When the gate is red, who fixes the blocking confirmed findings: the run's implementer seat, or for `council review <PR>` a fresh `[implement]` seat when the user asked for fixes, otherwise nobody (report only). Re-review with fresh seats after fixes. Feature requests and unrelated refactors go to the report's **Follow-ups**.
+- **review**: give every finding a verdict against the code: **confirmed**, **rejected** (one-line reason) or **plausible** (reported, non-blocking). Merge duplicates. When the gate is red, the fixer gets the evidence of every failing gate entry (blocking findings, failing eval output, low scores with reasons): the run's implementer seat, or for `council review <PR>` a fresh `[implement]` seat when the user asked for fixes, otherwise nobody: the review ends red (report only). Re-review with fresh seats after fixes. Feature requests and unrelated refactors go to the report's **Follow-ups**.
 
 A review is **green** when every entry of `gate` passes:
 
-- `evals`: every command exits 0; in a PR or final review's round that would turn green, `final_evals` too (a failure there starts another round). Run them in a checkout of the branch under review. When every eval list in scope is empty, the gate reads **evals: none configured** in every report and passes.
+- `evals`: every command exits 0; in a PR or final review's round that would turn green, `final_evals` too (a failure there starts another round). Run them in a checkout of the exact commit under review. Code you didn't write in this run (someone else's PR) runs only in a sandbox without credentials or network write access; with no such sandbox, the gate stays red and reports why. When every eval list in scope is empty, the gate reads **evals: none configured** in every report and passes.
 - `findings`: no confirmed finding with a severity in `block_on` is open.
 - `score`: at least one counting seat, and every counting seat gives ≥ `min_score`; a counting seat without a score is absent for scoring.
 

@@ -44,7 +44,7 @@ prototypes = 0              # int
 
 [implement]
 models = 1
-prefer = ["claude:opus", "codex"]
+prefer = ["claude:opus", "codex", "gemini", "grok"]
 parallel = 3                # int
 merger = "claude:sonnet"    # seat
 

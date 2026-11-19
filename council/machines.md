@@ -2,12 +2,12 @@
 
 `[machines.<name>]` lists where seats may run; reaching another machine needs `hc`. None listed: this machine.
 
-## Pick the machine (before staffing)
+## Pick the machine (with staffing)
 
 1. Candidates: every listed machine that is not `coordinate_only` and answers `hc exec --on <machine> -- uptime` (this machine: plain `uptime`). No candidate, or no `hc`: this machine, unless it is `coordinate_only`; then report and stop.
 2. Load per core = 1-minute load ÷ cores (`nproc` / `sysctl -n hw.ncpu`). On Linux also `free -g`: under 4 GB available drops the machine.
 3. Every candidate above ~1 per core: tell the user and wait (attended), or retry every 10 minutes for up to an hour, then report and stop (unattended).
-4. Pick the lowest load per core among machines that can run every provider you will staff; if none can, the lowest one, and the providers in its `skip` are absent.
+4. Staff every phase in scope (SKILL.md section 2) as if on each remaining candidate. Prefer the candidates where every phase with `models > 0` gets at least one seat, then the fewest shortfalls; break ties by load per core.
 
 All seats of a task run on the picked machine: in the current checkout locally, or at `<repos>/<owner>/<repo>` remotely (clone it if missing); implement and merge seats use worktrees of it.
 
