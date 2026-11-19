@@ -46,9 +46,9 @@ Run the `[research]` seats first when the plan touches unfamiliar code; their fi
 
 Settle the **test seams**, the **ticket size**, and the ship behaviour: the grill can lower the `[ship]` ceiling (e.g. `auto` to `ready`), never raise it. Write all of it to the tracker as the grill record (`grill.md` for `local`), with the ship ceiling in the run log.
 
-Before **go**, create `feature/<slug>` from the default branch (or from the kept prototype branch), commit the glossary and ADR changes to it, and push it.
+Before **go**, create the worktree `<repo>-worktrees/<slug>-merge` on a new `feature/<slug>` from the default branch (or from the kept prototype branch), commit the glossary and ADR changes there, and push; the main checkout stays on the default branch.
 
-With `hc` and a remote run machine, hand off after **go**: resolve `[run] coordinator` like any seat (fallback: the first available `[implement]` seat), then `hc run --bg --on <machine> --outlive-parent --name cr-<slug>-coordinator --cwd <repo> <its interactive line with the brief>`; the brief: "Use the council skill: continue council run `<slug>` at step 2 from `<tracker path or spec issue>`; report with hc send `<me>` at each phase change and when done or stuck." Otherwise continue in this session.
+With `hc` and a remote run machine, hand off after **go**: resolve `[run] coordinator` like any seat; it needs network, `hc` and writes outside the repo, so launch it without read-only flags or a sandbox (claude without `--disallowedTools`); with no such CLI available, stay in this session. Then `hc run --bg --on <machine> --outlive-parent --name cr-<slug>-coordinator --cwd <repo> <its interactive line with the brief>`; the brief: "Use the council skill: continue council run `<slug>` at step 2 from `<tracker path or spec issue>`; report with hc send `<me>` at each phase change and when done or stuck." Otherwise continue in this session.
 
 Done when the user said **go**, the grill record is written, `feature/<slug>` is pushed, and the handoff (if any) has reported its start.
 
@@ -76,11 +76,11 @@ Done when the frontier is empty (every ticket merged, labelled `needs-info`, or 
 
 With no merged ticket, skip to step 6. Otherwise open a **draft** PR from `feature/<slug>` to the default branch. Body: what changed (smallest sketch that shows it), evidence, merge danger (**door**: one-way when it can't be undone by a revert, like a migration or data deletion; else two-way; plus blast radius), the council section. Final review on the whole feature against its merge-base, with `evals` and `final_evals` in the merge worktree; a fresh `[implement]` seat there fixes confirmed findings. Any confirmed one-way finding makes the door one-way. Red CI is a blocker finding; a repo without CI reads **CI: none** and caps `merge` at `ready`.
 
-Done when the gate and CI are green, or `max_rounds` is reached.
+Done when the gate is green and CI is green or **CI: none**, or `max_rounds` is reached.
 
 ## 5. Ship
 
-Enter only when every ticket is merged (none labelled `needs-info`), the final gate is green, CI is green, and no `assumed` ADR is open. Otherwise leave the PR as a draft and go to step 6.
+Enter only when every ticket is merged (none labelled `needs-info`), the final gate is green, CI is green or **CI: none**, and no `assumed` ADR is open. Otherwise leave the PR as a draft and go to step 6.
 
 Then `[ship]` decides, capped by every cap the run recorded (grill ceiling, not independent review, no CI, no `origin`):
 
