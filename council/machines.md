@@ -9,12 +9,12 @@
 3. Pick the lowest load per core among machines whose `skip` excludes none of the providers you will staff; if none qualifies, the lowest one, and its skipped providers are absent.
 4. Every candidate above ~1 per core: tell the user and wait (attended), or retry every 10 minutes for up to an hour and then report (unattended).
 
-All seats of a task run on the picked machine, in one checkout at `<repos>/<owner>/<repo>`; clone it if missing.
+All seats of a task run on the picked machine: in the current checkout locally, or at `<repos>/<owner>/<repo>` remotely (clone it if missing); implement and merge seats use worktrees of it.
 
 ## hc
 
 - Launch: `hc run --bg --on <machine> --name <name> --cwd <repo> <interactive line>`; on this machine drop `--on`.
-- Collect: `hc wait --children all` returns when every seat is idle or exited; then `hc read --lines 1000 <machine>/<name>` (bare `<name>` locally). For long answers ask the seat to also write them to a file you can `hc file read`.
-- Reports: put the literal output of `echo $HC_TERMINAL_ID`, machine-qualified for remote seats (`laptop/t3`), into the brief as `<me>` (empty output: leave the hc send line out and collect by reading), with "also run: hc send <me> \"<seat>: done\"". `codex -s read-only` can't send; collect it by reading.
+- Collect: `hc wait --children all` returns when every seat is idle or exited; then `hc read --lines 1000 <machine>/<name>` (bare `<name>` locally). Truncated: read again with a larger `--lines`.
+- Reports: put the literal output of `echo $HC_TERMINAL_ID`, machine-qualified for remote seats (`laptop/t3`), into the brief as `<me>` (empty output: leave the hc send line out and collect by reading), with "also run: hc send <me> \"<seat>: done\"". Sandboxed seats (`codex -s read-only`, `agy --sandbox`) may fail to send: always collect by reading too.
 - A trust dialog is the user's: `hc attach <machine>/<name>`.
 - Stop: `hc kill <machine>/<name>`, then `hc rm <machine>/<name>`.

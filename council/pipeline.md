@@ -23,7 +23,7 @@ Find a skill in the session's skill list, else as `<dir>/**/<name>/SKILL.md` und
 
 ## State and tracker
 
-State lives where a fresh coordinator on the run machine finds it: the tracker, git (`feature/<slug>`, `ticket/<slug>-<n>`), and seat names `cr-<slug>-<phase>-<ticket|all>-r<round>-<provider>`. The **run log** (one entry per phase change) names the current phase and frontier; resume from it, and leave merged tickets merged.
+State lives where a fresh coordinator on the run machine finds it: the tracker, git (`feature/<slug>`, `ticket/<slug>-<n>`), and seat names `cr-<slug>-<phase>-<ticket|all>-r<round>-<provider>`. The **run log** gets the preflight block (staffing, dropped providers, workflow skills, caps) and, at every phase change, the phase's staffing, shortfalls and findings summary; it names the current phase and frontier; resume from it, and leave merged tickets merged.
 
 `[run] tracker`:
 
@@ -34,9 +34,9 @@ State lives where a fresh coordinator on the run machine finds it: the tracker, 
 ## 0. Preflight (user present)
 
 1. Config: defaults and user config (SKILL.md section 1).
-2. Pick the run machine ([machines.md](machines.md)), clone or pull the repo there, then finish the config with the repo layer from the default branch.
+2. Pick the run machine ([machines.md](machines.md)), clone or pull the repo there, then finish the config with the repo layer (SKILL.md section 1).
 3. Resolve the tracker (a remote one that isn't reachable: ask whether to use `local`; for `local`, create its folder) and the workflow skill per step.
-4. Staff (SKILL.md section 2), including `[run] coordinator` and `[implement] merger`. Ticket worktrees will live under `<repo>-worktrees/`: create it, and for each implement provider launch once in a throwaway worktree there; the user accepts each trust dialog, then the throwaway worktree is removed. Launch each read-only seat once in the main checkout the same way. A provider that prompts again after that is dropped and the next in `prefer` tried.
+4. Staff (SKILL.md section 2), including `[run] coordinator` and `[implement] merger`. Ticket worktrees will live under `<repo>-worktrees/`: create it and launch each implement provider once there, the user accepting each trust dialog; then launch it again in a fresh throwaway worktree inside it and remove that worktree. Launch each read-only seat twice in the main checkout the same way. A provider that prompts on its second launch is dropped and the next in `prefer` tried. Write the preflight block to the run log.
 
 Done when the user has seen, in one block: staffing with shortfalls, machine, workflow skill per step, tracker, the `[ship]` ceiling, `open_questions`, and **evals: none configured** if so.
 
@@ -67,14 +67,14 @@ Done when the spec and every ticket, with blockers, are published.
 1. The **frontier** is every open ticket whose blockers are merged. Each frontier ticket gets an `[implement]` seat in its own worktree `<repo>-worktrees/<slug>-<n>` on `ticket/<slug>-<n>`, branched from the current `feature/<slug>`, at most `[implement] parallel` at a time; `[research]` seats explore first when the ticket needs it. The seat writes tests first at the agreed seams and commits; you push the ticket branch (sandboxed seats can't).
 2. `evals` run in the ticket's worktree.
 3. With `[review] per_ticket`, review seats run in the main checkout and read the ticket via `git diff feature/<slug>...ticket/<slug>-<n>` and `git show ticket/<slug>-<n>:<file>`, against the repo's coding standards and the ticket. The implementer seat gets the confirmed findings as a follow-up message (print mode: a fresh seat in the same worktree with the findings and the branch).
-4. Green (or right after implementing when `per_ticket = false`): merges happen one at a time in a dedicated worktree `<repo>-worktrees/<slug>-merge` on `feature/<slug>`. The `[implement] merger` seat (fallback: the first available `[implement]` seat) merges the ticket, runs `evals`, and you push. A conflict it can't resolve, or red evals after the merge, returns the ticket to its implementer as another review round. Then close the ticket, remove its worktree, stop its seats, launch the new frontier.
+4. Green (or right after implementing when `per_ticket = false`): merges happen one at a time in a dedicated worktree `<repo>-worktrees/<slug>-merge` on `feature/<slug>`. The `[implement] merger` seat (fallback: the first available `[implement]` seat) merges the ticket, runs `evals`, and you push. A conflict it can't resolve, or red evals after the merge: reset the merge worktree to the pushed `feature/<slug>`, then return the ticket to its implementer as another review round. Then close the ticket, remove its worktree, stop its seats, launch the new frontier.
 5. At `max_rounds`: label the ticket `needs-info` with its open findings; its dependents wait.
 
 Done when the frontier is empty (every ticket merged, labelled `needs-info`, or blocked by one), and no ticket worktree or seat remains.
 
 ## 4. Feature PR
 
-With no merged ticket, skip to step 6. Otherwise open a **draft** PR from `feature/<slug>` to the default branch. Body: what changed (smallest sketch that shows it), evidence, merge danger (**door**: one-way when it can't be undone by a revert, like a migration or data deletion; else two-way; plus blast radius), the council section. Final review on the whole feature against its merge-base, with `evals` and `final_evals` in the merge worktree; a fresh `[implement]` seat there fixes confirmed findings. Any confirmed one-way finding makes the door one-way. Red CI is a blocker finding; a repo without CI reads **CI: none** and caps `merge` at `ready`.
+With no merged ticket, skip to step 6. Otherwise open a **draft** PR from `feature/<slug>` to the default branch. Body: what changed (smallest sketch that shows it), evidence, merge danger (**door**: one-way when it can't be undone by a revert, like a migration or data deletion; else two-way; plus blast radius), the council section. Final review on the whole feature against its merge-base (the brief asks seats to flag one-way changes), with `evals` and `final_evals` in the merge worktree; a fresh `[implement]` seat there fixes confirmed findings. Any confirmed one-way finding makes the door one-way. Red CI is a blocker finding; a repo without CI reads **CI: none** and caps `merge` at `ready`.
 
 Done when the gate is green and CI is green or **CI: none**, or `max_rounds` is reached.
 

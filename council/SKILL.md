@@ -13,13 +13,13 @@ Branches:
 - `council run`: follow [pipeline.md](pipeline.md); it uses every section below.
 - `council decide`: [Decide](#decide), which uses sections 1, 3 and 4.
 - `council review <PR>` and delegated work: sections 1–6.
-- `[machines]` configured or `hc` installed: read [machines.md](machines.md) before section 2.
+- `[machines]` configured or `hc` installed: read [machines.md](machines.md) before staffing (section 2 or Decide).
 
 ## 1. Config
 
 Merge [defaults.toml](defaults.toml) (every key, with its type and values), `~/.config/council/council.toml`, then `<repo>/.council.toml`; later wins per key within each section.
 
-**Trust boundary.** For `council review <PR>` and for a run after **go**, the repo layer is `git show origin/<default>:.council.toml` (after `git fetch origin`; `<default>` from `git symbolic-ref refs/remotes/origin/HEAD`), never the branch under review or a branch the run produced. `[ship]` comes from that file or `defaults.toml`, never from user config. Without an `origin` remote: the local default branch's file, with `merge` capped at `ready`.
+**Trust boundary.** For `council review <PR>` and `council run`, the repo layer is `git show origin/<default>:.council.toml` (after `git fetch origin`; `<default>` from `git symbolic-ref refs/remotes/origin/HEAD`), never the branch under review or a branch the run produced. `[ship]` comes from that file or `defaults.toml`, never from user config. Without an `origin` remote: the local default branch's file, with `merge` capped at `ready`.
 
 A seat is `provider` or `provider:model`. Resolve the model: the seat's `:model`, else `[seats.<provider>] model`; then through `[seats.<provider>] aliases`. `default` means the CLI's configured model (omit the flag where the launch line marks it optional).
 
@@ -57,11 +57,11 @@ Write the brief to a file outside the repo and pass it as `"$(cat <file>)"`, so 
 | Provider | Interactive (hc) | Print mode (no hc) | Notes |
 | --- | --- | --- | --- |
 | claude | `claude --model <model> --permission-mode auto [--disallowedTools Edit Write NotebookEdit Agent] -- "<brief>"` | `claude -p --model <model> --permission-mode auto [--disallowedTools Edit Write NotebookEdit Agent] -- "<brief>" > <out>` | Always `--model`. Read-only seats keep `--disallowedTools`. Plan mode stalls on an approval prompt. |
-| codex | `codex --no-daemon -a never -s read-only [-m <model>] "<brief>"` | `codex --no-daemon exec -s read-only [-m <model>] -o <out> "<brief>" > <log> 2>&1` | `--no-daemon` goes before `exec`. Implement: `-s workspace-write`. Read-only can't `hc send`: read its screen or `<out>`. |
+| codex | `codex --no-daemon -a never -s read-only [-m <model>] "<brief>"` | `codex --no-daemon exec -s read-only [-m <model>] -o <out> "<brief>" > <log> 2>&1` | `--no-daemon` goes before `exec`. Implement: `-s workspace-write`. |
 | grok | `grok --permission-mode auto [-m <model>] "<brief>"` | `grok -p "<brief>" --permission-mode auto [-m <model>] > <out>` | Read-only by the brief. Trust dialog on each new folder: run it in an already trusted checkout. |
 | gemini | `agy --mode auto --sandbox --model <model> -i "<brief>"` | `agy -p --mode auto --sandbox --model <model> "<brief>" > <out>` | Only its Gemini models; read-only by the brief; the sandbox blocks network. Where `agy` offers no auto mode (the status bar shows none), every command prompts: put `gemini` in that machine's `skip`. |
 
-Without `hc`: start each print-mode line in the background, wait up to `[defaults] seat_timeout` minutes for it to exit, read `<out>` whole. A non-zero exit, a timeout or an empty answer makes the seat absent; take the next seat in `prefer`. A harness with its own subagents may run Claude seats as subagents instead.
+Without `hc`: start each print-mode line in the background and read `<out>` whole once it exits. With or without `hc`, a seat that crashes, gives an empty answer, or runs past `[defaults] seat_timeout` minutes is stopped and absent; take the next seat in `prefer`. A harness that runs a seat's own provider may run that seat as its subagent instead, with the seat's model and a fresh context.
 
 Done when every seat has returned an answer or is absent.
 
@@ -74,7 +74,7 @@ Done when every seat has returned an answer or is absent.
 
 A review is **green** when every entry of `gate` passes:
 
-- `evals`: every command exits 0; in the round that would turn green, `final_evals` too (a failure there starts another round). Empty `evals`: the gate reads **evals: none configured** in every report and passes.
+- `evals`: every command exits 0; in a PR or final review's round that would turn green, `final_evals` too (a failure there starts another round). Run them in a checkout of the branch under review. When every eval list in scope is empty, the gate reads **evals: none configured** in every report and passes.
 - `findings`: no confirmed finding with a severity in `block_on` is open.
 - `score`: at least one counting seat, and every counting seat gives ≥ `min_score`; a counting seat without a score is absent for scoring.
 
