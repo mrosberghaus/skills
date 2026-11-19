@@ -1,44 +1,37 @@
-# Council defaults. Override per user in ~/.config/council/council.toml
-# and per project in <repo>/.council.toml (same keys; later files win per key).
-#
-# A seat is "provider" or "provider:model". The provider decides diversity
-# (distinct_providers, exclude_implementer); the model decides strength and cost.
-# Without ":model" the provider's [seats.<provider>] model is used.
+# Council config keys and defaults. Behaviour: SKILL.md, pipeline.md, machines.md.
+# Override in ~/.config/council/council.toml, then <repo>/.council.toml.
 
 [defaults]
-distinct_providers = true   # no two seats in one phase from the same provider
-skip_trivial = true         # typo/one-liner: skip research and grill (review still runs)
+distinct_providers = true   # bool
+skip_trivial = true         # bool
 
-# Default model per provider, and short names you can use after the colon.
+# [machines.<name>]           # none = this machine
+# repos = "~/Developer"       # path: repos at <repos>/<owner>/<repo>
+# skip = ["gemini"]           # providers that can't run unattended there
+# coordinate_only = true      # bool: never runs seats
+
 [seats.claude]
 model = "opus"
 aliases = { fable = "claude-fable-5-2", opus = "claude-opus-5-5", sonnet = "claude-sonnet-5-5", haiku = "claude-haiku-5-5" }
 
 [seats.codex]
-model = "default"           # the model in ~/.codex/config.toml; or e.g. "gpt-6.2-sol"
+model = "default"
 
 [seats.grok]
-model = "default"           # grok's default; or an ID from `grok models`
+model = "default"
 
 [seats.gemini]
 model = "neon"
 aliases = { neon = "gemini-4-neon-high", "neon-xhigh" = "gemini-4-neon-xhigh", hydrogen = "gemini-4-hydrogen-high", "hydrogen-xhigh" = "gemini-4-hydrogen-xhigh", carbon = "gemini-4-carbon-high", argon = "gemini-4-argon-high", flash = "gemini-3.8-flash-high" }
 
-# Machines seats may run on. None listed = everything runs here.
-# Define yours in ~/.config/council/council.toml, e.g.:
-# [machines.build-1]
-# repos = "~/Developer"        # repos at <repos>/<owner>/<repo>
-# skip = ["gemini"]            # seats that can't run unattended there
-# [machines.laptop]
-# coordinate_only = true       # never runs seats
+[run]
+workflow = "auto"           # "auto" | "builtin"
+# steps = { spec = "to-spec" }  # step key -> skill name
+tracker = "local"           # "local" | "github" | "gitlab" | "linear" | "repo"
+open_questions = "park"     # "park" | "assume"
+coordinator = "claude:opus" # seat
 
-[run]                        # `council run`, see pipeline.md
-workflow = "auto"           # "auto": use an installed skill per step if found, else built-in | "builtin"
-# steps = { spec = "to-spec", tickets = "to-tickets" }   # optional: pin a skill per step
-tracker = "local"           # "local": files in .council/<slug>/ | "github" | "gitlab" | "linear" | "repo" (the tracker the repo documents)
-open_questions = "park"     # after "go": "park" (ticket waits) or "assume" (decide + ADR marked assumed)
-coordinator = "claude:opus" # the unattended run's own session
-
+# Every phase: models (int, 0 = skip), prefer (seats, in order).
 [research]
 models = 2
 prefer = ["claude:sonnet", "gemini", "codex", "grok"]
@@ -46,33 +39,31 @@ prefer = ["claude:sonnet", "gemini", "codex", "grok"]
 [grill]
 models = 1
 prefer = ["grok", "codex", "claude:opus", "gemini"]
-prototypes = 0              # >0: build N throwaway variants for an open design question, user keeps one
+prototypes = 0              # int
 
 [implement]
-models = 1                  # >1 = parallel attempts in separate worktrees, best one wins
+models = 1
 prefer = ["claude:opus", "codex"]
-parallel = 3                # max tickets implemented at once in `council run`
-merger = "claude:sonnet"    # merges green ticket branches into the feature branch
+parallel = 3                # int
+merger = "claude:sonnet"    # seat
 
 [review]
 models = 2
 prefer = ["codex", "grok", "gemini:neon-xhigh", "claude:opus"]
-exclude_implementer = true  # the implementer's provider does not count toward `models`
-max_rounds = 3
-# Green = every gate below passes.
-gate = ["evals", "findings"]  # any of: "evals", "findings", "score"
-evals = []                  # commands run every round, e.g. ["pnpm typecheck", "pnpm test --changed"]
-final_evals = []            # extra commands run once, in the round that turns green
-block_on = ["blocker", "major"]  # confirmed findings at these severities block green
-min_score = 9               # only gates when "score" is in `gate`
-show_score = true           # seats still give N/10; shown, not gating unless "score" in `gate`
-per_ticket = true           # `council run`: review each ticket before it merges into the feature branch
+exclude_implementer = true  # bool
+max_rounds = 3              # int
+gate = ["evals", "findings"]  # subset of "evals", "findings", "score"
+evals = []                  # shell commands
+final_evals = []            # shell commands
+block_on = ["blocker", "major"]
+min_score = 9               # int 0-10
+show_score = true           # bool
+per_ticket = true           # bool
 
-# [ship] is honoured ONLY from <repo>/.council.toml on the default branch.
-# These values document the keys; they never authorize anything.
+# [ship] counts only from the default branch's .council.toml.
 [ship]
-merge = "ready"             # "ready": PR ready for review, stop | "auto": merge when green + CI green
-one_way = "ready"           # one-way-door PRs (migrations, deletions): "ready" | "auto"
-deploy = ""                 # "" none | "ci" merging deploys | "<command>" run after merge
-verify = ""                 # "<command>" run after deploy
-rollback = ""               # "<command>" run when verify fails
+merge = "ready"             # "ready" | "auto"
+one_way = "ready"           # "ready" | "auto"
+deploy = ""                 # "" | "ci" | shell command
+verify = ""                 # "" | shell command
+rollback = ""               # "" | shell command
