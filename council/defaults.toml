@@ -4,6 +4,7 @@
 [defaults]
 distinct_providers = true   # bool
 skip_trivial = true         # bool
+seat_timeout = 30           # minutes
 
 # [machines.<name>]           # none = this machine
 # repos = "~/Developer"       # path: repos at <repos>/<owner>/<repo>
@@ -60,7 +61,6 @@ min_score = 9               # int 0-10
 show_score = true           # bool
 per_ticket = true           # bool
 
-# [ship] counts only from the default branch's .council.toml.
 [ship]
 merge = "ready"             # "ready" | "auto"
 one_way = "ready"           # "ready" | "auto"
