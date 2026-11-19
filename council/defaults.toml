@@ -1,0 +1,69 @@
+# Council config keys and defaults. Behaviour: SKILL.md, pipeline.md, machines.md.
+# Override in ~/.config/council/council.toml, then <repo>/.council.toml.
+
+[defaults]
+distinct_providers = true   # bool
+skip_trivial = true         # bool
+seat_timeout = 30           # minutes
+
+# [machines.<name>]           # none = this machine
+# repos = "~/Developer"       # path: repos at <repos>/<owner>/<repo>
+# skip = ["gemini"]           # providers that can't run unattended there
+# coordinate_only = true      # bool: never runs seats
+
+[seats.claude]
+model = "opus"
+aliases = { fable = "claude-fable-5-2", opus = "claude-opus-5-5", sonnet = "claude-sonnet-5-5", haiku = "claude-haiku-5-5" }
+
+[seats.codex]
+model = "default"
+
+[seats.grok]
+model = "default"
+
+[seats.gemini]
+model = "neon"
+aliases = { neon = "gemini-4-neon-high", "neon-xhigh" = "gemini-4-neon-xhigh", hydrogen = "gemini-4-hydrogen-high", "hydrogen-xhigh" = "gemini-4-hydrogen-xhigh", carbon = "gemini-4-carbon-high", argon = "gemini-4-argon-high", flash = "gemini-3.8-flash-high" }
+
+[run]
+workflow = "auto"           # "auto" | "builtin"
+# steps = { spec = "to-spec" }  # step key -> skill name
+tracker = "local"           # "local" | "github" | "gitlab" | "linear" | "repo"
+open_questions = "park"     # "park" | "assume"
+coordinator = "claude:opus" # seat
+
+# Every phase: models (int, 0 = skip), prefer (seats, in order).
+[research]
+models = 2
+prefer = ["claude:sonnet", "gemini", "codex", "grok"]
+
+[grill]
+models = 1
+prefer = ["grok", "codex", "claude:opus", "gemini"]
+prototypes = 0              # int
+
+[implement]
+models = 1
+prefer = ["claude:opus", "codex", "gemini", "grok"]
+parallel = 3                # int
+merger = "claude:sonnet"    # seat
+
+[review]
+models = 2
+prefer = ["codex", "grok", "gemini:neon-xhigh", "claude:opus"]
+exclude_implementer = true  # bool
+max_rounds = 3              # int
+gate = ["evals", "findings"]  # subset of "evals", "findings", "score"
+evals = []                  # shell commands
+final_evals = []            # shell commands
+block_on = ["blocker", "major"]
+min_score = 9               # int 0-10
+show_score = true           # bool
+per_ticket = true           # bool
+
+[ship]
+merge = "ready"             # "ready" | "auto"
+one_way = "ready"           # "ready" | "auto"
+deploy = ""                 # "" | "ci" | shell command
+verify = ""                 # "" | shell command
+rollback = ""               # "" | shell command
