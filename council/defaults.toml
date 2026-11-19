@@ -24,7 +24,18 @@ model = "default"           # grok's default; or an ID from `grok models`
 model = "neon"
 aliases = { neon = "gemini-4-neon-high", "neon-xhigh" = "gemini-4-neon-xhigh", hydrogen = "gemini-4-hydrogen-high", "hydrogen-xhigh" = "gemini-4-hydrogen-xhigh", carbon = "gemini-4-carbon-high", argon = "gemini-4-argon-high", flash = "gemini-3.8-flash-high" }
 
+# Machines seats may run on. None listed = everything runs here.
+# Define yours in ~/.config/council/council.toml, e.g.:
+# [machines.build-1]
+# repos = "~/Developer"        # repos at <repos>/<owner>/<repo>
+# skip = ["gemini"]            # seats that can't run unattended there
+# [machines.laptop]
+# coordinate_only = true       # never runs seats
+
 [run]                        # `council run`, see pipeline.md
+workflow = "auto"           # "auto": use an installed skill per step if found, else built-in | "builtin"
+# steps = { spec = "to-spec", tickets = "to-tickets" }   # optional: pin a skill per step
+tracker = "local"           # "local": files in .council/<slug>/ | "github" | "gitlab" | "linear" | "repo" (the tracker the repo documents)
 open_questions = "park"     # after "go": "park" (ticket waits) or "assume" (decide + ADR marked assumed)
 coordinator = "claude:opus" # the unattended run's own session
 

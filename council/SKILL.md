@@ -1,6 +1,6 @@
 ---
 name: council
-description: Use before delegating any research, grill, implement or review work on a task, to pick which models do each phase from the project's .council.toml; for "council run" (attended grill, then unattended spec, tickets, implementation, review and opt-in deploy on Matt Pocock's skills); and when the user says "council" or asks several models to weigh one decision. Skip only for plain questions with no task.
+description: Use before delegating any research, grill, implement or review work on a task, to pick which models do each phase from the project's .council.toml; for "council run" (attended grill, then unattended spec, tickets, implementation, review and opt-in deploy, using installed workflow skills where present); and when the user says "council" or asks several models to weigh one decision. Skip only for plain questions with no task.
 argument-hint: "[run <idea|issue> | plan | decide <question> | review <PR>]"
 ---
 
@@ -8,7 +8,7 @@ argument-hint: "[run <idea|issue> | plan | decide <question> | review <PR>]"
 
 The council staffs tasks: for each phase (research, grill, implement, review) it picks which models do the work, following the config, then runs them. You (whichever agent runs this skill) are the coordinator: you pick, launch, check and synthesize. You are not a seat.
 
-**`council run`**: the full pipeline from grill to deploy. Read [pipeline.md](pipeline.md) and follow it; the sections below still define staffing, seats, the brief and the review gate. After the grill, hand off to an unattended coordinator on the dev machine so the run survives this session: `hc run --bg --on <machine> --outlive-parent --name cr-<slug>-coordinator --cwd Developer/<owner>/<repo> claude --model <[run] coordinator> -- "Use the council skill: council run, resume <spec issue> after go. Report with hc send <me> at each phase change and when done or stuck."` (needs this skill installed on that machine).
+**`council run`**: the full pipeline from grill to deploy. Read [pipeline.md](pipeline.md) and follow it; the sections below still define staffing, seats, the brief and the review gate. After the grill, with `hc` and a listed machine, hand off to an unattended coordinator there so the run survives this session: `hc run --bg --on <machine> --outlive-parent --name cr-<slug>-coordinator --cwd <repo> claude --model <[run] coordinator> -- "Use the council skill: council run, resume <spec> after go. Report with hc send <me> at each phase change and when done or stuck."` (needs this skill and the same user config on that machine). Without `hc`, keep coordinating in this session.
 
 ## 1. Read the config
 
@@ -33,10 +33,10 @@ Show the plan in one table before launching, then proceed without waiting unless
 ```markdown
 | Phase | Seats | Machine |
 | --- | --- | --- |
-| research | Claude Sonnet, Gemini | mini-dev |
-| grill | Grok | mini-dev |
-| implement | Claude Opus | mini-dev |
-| review | Codex, Grok | mini-dev |
+| research | Claude Sonnet, Gemini | build-1 |
+| grill | Grok | build-1 |
+| implement | Claude Opus | build-1 |
+| review | Codex, Grok | build-1 |
 ```
 
 ## 3. Run the phases
@@ -67,22 +67,23 @@ Research, grill and review seats are read-only. Only implement seats edit, and o
 | claude | `claude --model <model> --disallowedTools Edit Write NotebookEdit Agent -- "<task>"` | Always pass `--model`. Implement seats drop `--disallowedTools`. Not `--permission-mode plan`: it stops at a plan-approval prompt. |
 | codex | `codex --no-daemon -s read-only [-m <model>] "<task>"` | Implement: `-s workspace-write`. Read-only blocks `hc send`: collect with `hc read`. |
 | grok | `grok [-m <model>] "<task>"` | Read-only by instruction only. First launch in a folder: trust dialog, ask the user to accept (`hc attach <machine>/<name>`). |
-| gemini | `agy --mode auto --sandbox --model <model> -i "<task>"` | Models via `[seats.gemini] aliases` (default `neon` = `gemini-4-neon-high`; `neon-xhigh`, `hydrogen`, `carbon`, `argon`, `flash`); never its Claude/GPT models. Works on homer and mini-dev. On cyclone-dev auto mode is missing, so every command asks permission: run this seat on mini-dev instead. |
+| gemini | `agy --mode auto --sandbox --model <model> -i "<task>"` | Models via `[seats.gemini] aliases` (default `neon` = `gemini-4-neon-high`; `neon-xhigh`, `hydrogen`, `carbon`, `argon`, `flash`); never its Claude/GPT models. Needs auto mode: where `agy` lacks it, every command asks permission, so list `gemini` in that machine's `skip`. |
 
-A seat is unavailable when its CLI is missing, not signed in, or fails to start: report **absent: <reason>**.
+A seat is unavailable when its CLI is missing, not signed in, fails to start, or is in the machine's `skip`: report **absent: <reason>**.
 
 ## Where seats run
 
-1. Dev machines via `hc run --bg --on <machine>`. Before launching, check `uptime`, cores (`nproc` / `sysctl -n hw.ncpu`) and `free -g` on cyclone-dev; lower load per core wins. Both above ~1 per core: say so and queue.
-2. All seats of a task on one machine (shared checkout); the implementer's machine if one exists. Repo at `~/Developer/<owner>/<repo>`; clone if missing.
-3. Locally only when there is no repo or both machines are unreachable.
+From `[machines]` in the config (see `defaults.toml`). Without any entry, everything runs on this machine.
 
-```sh
-echo $HC_TERMINAL_ID   # write the literal value, e.g. homer/t9t, into <me>
-hc run --bg --on mini-dev --name council-review-codex --cwd Developer/<owner>/<repo> codex --no-daemon -s read-only "<task>"
-hc wait --children all
-hc read --lines 200 mini-dev/council-review-codex
-```
+1. **Pick the machine**: among `[machines.<name>]` entries (skip `coordinate_only` ones), check load with `uptime` and cores (`nproc` / `sysctl -n hw.ncpu`), plus `free -g` on Linux. Lower load per core wins. All above ~1 per core: say so and queue.
+2. **All seats of a task on one machine** (shared checkout); the implementer's machine if one exists. Repo at `<repos>/<owner>/<repo>` there; clone if missing.
+3. **A seat in that machine's `skip`** runs on the next machine where it isn't skipped, at the same commit; else it is absent.
+4. **This machine** only when no listed machine is reachable, or the question has no repo.
+
+How seats launch depends on what is installed:
+
+- **`hc`** (persistent terminals, also on other machines): `hc run --bg [--on <machine>] --name <name> --cwd <repo> <launch line>`, then `hc wait --children all` and `hc read --lines 200 <machine>/<name>`. Seats report with `hc send <me>`, where `<me>` is the literal value of `echo $HC_TERMINAL_ID` here, machine-qualified for remote seats (e.g. `laptop/t3`). Never put `$HC_TERMINAL_ID` itself into a brief.
+- **No `hc`**: this machine only. Run each launch line as a background shell command with its output redirected to a file, and read the file when it exits. For non-interactive runs use each CLI's print mode (`claude -p`, `codex exec`, `grok -p`, `agy -p`). Claude seats may instead be the harness's own subagents with the brief as their prompt and the seat's model.
 
 ## The brief
 
@@ -97,7 +98,7 @@ Context: <constraints, success criteria, known concerns; compact>
 
 Answer with: position or result; evidence (files/lines checked); biggest risk; what others may miss.<review: instead, a list of findings, each: severity (blocker/major/minor/nit), file:line, evidence, suggested fix. <show_score: then Score N/10.>>
 
-End your final message with the full answer. If you can, also run: hc send <me> "<seat>: done"
+End your final message with the full answer. If `hc` is available, also run: hc send <me> "<seat>: done"
 ```
 
 If `jg` (Jevgrep) is installed, use it to find **Where to look**; otherwise `rg` and reads.
@@ -113,7 +114,7 @@ If `jg` (Jevgrep) is installed, use it to find **Where to look**; otherwise `rg`
   ```markdown
   ## Council
 
-  Seats: implement Claude Opus · review Codex, Grok (mini-dev)
+  Seats: implement Claude Opus · review Codex, Grok (build-1)
 
   | Round | Evals | Blocker | Major | Minor | Nit | Rejected | Scores |
   | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -122,5 +123,5 @@ If `jg` (Jevgrep) is installed, use it to find **Where to look**; otherwise `rg`
   ```
 
   Counts are confirmed findings. Drop the Scores column without `show_score`; `absent` / `no score` where it applies; never invent a score.
-- `hc kill` and `hc rm` every council terminal you started.
+- Stop and remove every seat you started (`hc kill` + `hc rm`, or end the background process).
 - Say which machine and model each seat used and which were absent.

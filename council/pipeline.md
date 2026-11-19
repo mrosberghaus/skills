@@ -1,62 +1,83 @@
 # Council run: grill to deploy
 
-`council run <idea or issue>`. The user is present for **preflight + grill** and does the **retro**. Everything between runs unattended. Built on Matt Pocock's skills (plugin `mattpocock-skills`); this file maps his pipeline onto council seats and replaces his user gates.
+`council run <idea or issue>`. The user is present for **preflight + grill** and does the **retro**. Everything between runs unattended.
 
-## Matt's skills
+Each step below says what must happen. **How** comes from a workflow skill when one is installed, otherwise from the built-in step written here. Nothing here requires a particular skill set.
 
-Resolve his folder once: `installPath` of `mattpocock-skills@mattpocock` in `~/.claude/plugins/installed_plugins.json` on the coordinator's machine, then `<installPath>/skills/<area>/<name>/SKILL.md`. Most are `disable-model-invocation: true`, so never call them with the Skill tool: **read the file and follow it**, with the overrides below. Seat briefs say "read and follow `<path>`" too; Codex, Grok and agy have no Skill tool. "Code review" below means Matt's `engineering/code-review`, not any built-in skill of that name. If a file is missing (plugin renamed it), stop and report the path.
+## Workflow skills (optional)
+
+`[run] workflow` picks the source:
+
+- `auto` (default): for each step, use a matching installed skill if there is one, else the built-in step.
+- `builtin`: always the built-in steps.
+- a list of skill names per step, e.g. `steps = { spec = "to-spec", tickets = "to-tickets" }`, to pin them.
+
+Known matches (Matt Pocock's `mattpocock-skills`, if installed):
+
+| Step | Skill |
+| --- | --- |
+| grill | `grill-with-docs` (or `grilling`) |
+| prototype | `prototype` |
+| spec | `to-spec` |
+| tickets | `to-tickets` |
+| implement | `implement-spec`, `tdd` |
+| review | `code-review` (his, not a built-in of the same name) |
+| PR body | `pr` |
+| retro | `retro` |
+
+Find a skill in the session's skill list, or by path: `installPath` of its plugin in `~/.claude/plugins/installed_plugins.json`, then `<installPath>/skills/**/<name>/SKILL.md`. Skills marked `disable-model-invocation: true` can't be called with the Skill tool: **read the file and follow it**. Seat briefs say "read and follow `<path>`" too; non-Claude CLIs have no Skill tool. Wherever a workflow skill stops to ask the user after **go**, apply the override for that step below instead.
+
+## Tracker
+
+`[run] tracker`:
+
+- `local` (default): spec, tickets and run log as Markdown files in `.council/<slug>/` of the repo's main checkout on the coordinator's machine (`spec.md`, `tickets/<n>-<title>.md` with `Status:`, `Blocked by:` and `Labels:` lines, `run-log.md`). Add `.council/` to `.git/info/exclude`, so it never lands in a commit or PR. Nothing leaves the machine.
+- `github` / `gitlab` / `linear`: issues there, through `gh`, `glab` or the Linear tools.
+- `repo`: whatever the repo documents (e.g. `docs/agents/issue-tracker.md`).
 
 ## State lives outside the session
 
-Everything a restarted coordinator needs is in the tracker and git:
-
-- spec issue (with a **run log** comment the coordinator updates at every phase change), tickets with their labels, feature branch `feature/<slug>`, ticket branches `ticket/<slug>-<n>`.
-- terminal names are deterministic: `cr-<slug>-<phase>-<ticket|all>-<provider>`; `hc ls` shows what is still running.
-
-On restart: read the run log, `hc ls`, `git branch -r`, continue from the current frontier. Never redo a merged ticket.
+A restarted coordinator needs only the tracker and git: the spec with a **run log** (a comment on the spec issue, or `run-log.md` for `local`) updated at every phase change, tickets with labels, branch `feature/<slug>`, ticket branches `ticket/<slug>-<n>`, and seat names `cr-<slug>-<phase>-<ticket|all>-<provider>`. On restart: read the run log, list running seats (`hc ls`, or the background processes), `git branch -r`, continue from the frontier. Never redo a merged ticket.
 
 ## 0. Preflight (attended)
 
-1. `docs/agents/issue-tracker.md` exists in the repo. If not: tell the user to run `/setup-matt-pocock-skills` there, stop.
-2. Pick the machine (SKILL.md "Where seats run"), clone or pull the repo there.
-3. Clear every prompt while the user is here: launch each staffed CLI once in the repo's main checkout and have the user accept trust dialogs (`hc attach`). Codex's trust covers the repo root, so its worktrees too. A seat that still prompts is dropped for this run and reported.
-4. Read `.council.toml` **from the default branch** (`git show origin/<default>:.council.toml`). `[ship]` counts only from this file, never from defaults or user config, and never from a branch the run produced.
-5. Tell the user, in one block: staffing table, machine, what `[ship]` allows (stops at ready PR / merges / deploys), `open_questions` policy.
+1. Resolve the tracker. A remote tracker that isn't reachable (no `gh` auth, no Linear tools): say so and ask whether to use `local`.
+2. Pick the machine (SKILL.md "Where seats run"); clone or pull the repo there.
+3. Clear every prompt while the user is here: launch each staffed CLI once in the repo's main checkout; the user accepts trust dialogs (with `hc`: `hc attach <machine>/<name>`). Codex's trust covers the repo root and its worktrees. A seat that still prompts is dropped for this run and reported.
+4. Read `.council.toml` **from the default branch** (`git show origin/<default>:.council.toml`). `[ship]` counts only from this file.
+5. Tell the user in one block: staffing table, machine, workflow skills found per step, tracker, what `[ship]` allows, `open_questions` policy.
 
 ## 1. Grill (attended)
 
-Follow `engineering/grill-with-docs` (it loads `grilling` + `domain-modeling`): glossary terms and ADRs get written as you go.
+Interview the user until the plan is shared understanding: work the open decisions in rounds, recommend an answer for each, record new terms in the glossary and hard calls as ADRs where the repo keeps them (`GLOSSARY.md`, `docs/adr/`; create them if the repo has neither and the user agrees).
 
-- Before round 1, send the plan to the `[grill]` seats (read-only, in parallel). Merge their questions into your first frontier. Ask nothing while they run.
-- With `[grill] prototypes = N` and an open design question, follow `engineering/prototype`: N variants in the background, the user keeps one.
-- Settle here what Matt's later skills would ask the user: **test seams** (`to-spec`), **ticket granularity** (`to-tickets`), and the `[ship]` behaviour above.
-- The grill ends when the user says **go**. After that, never ask the user anything.
+- Before round 1, send the plan to the `[grill]` seats (read-only, parallel); merge their questions into the first round. Ask nothing while they run.
+- With `[grill] prototypes = N` and an open design question: N throwaway variants in the background, the user keeps one.
+- Settle here what later steps would otherwise ask: **test seams**, **ticket granularity**, the `[ship]` behaviour.
+- Ends when the user says **go**. After that, never ask the user anything.
 
 ## 2. Spec and tickets (AFK)
 
-- Follow `engineering/to-spec`. Override: skip "check with the user that these seams match"; use the seams from the grill.
-- Follow `engineering/to-tickets`. Override: instead of "quiz the user", send the breakdown to the `[review]` seats for one read-only round (granularity, blocking edges, missing slices). Apply what holds up; no second round.
-- Publish both to the configured tracker with the `ready-for-agent` label.
+- **Spec**: problem, solution, user stories, implementation decisions, testing decisions (seams from the grill), out of scope. Use the glossary's terms; respect ADRs. Publish to the tracker.
+- **Tickets**: vertical slices, each small enough for one fresh session, each listing the tickets that block it; prefactoring first. Instead of a user approval loop: one read-only round by the `[review]` seats (granularity, blocking edges, missing slices); apply what holds up. Publish, labelled ready for an agent.
 
-**Open questions** that turn up after **go**, per `[run] open_questions`:
+**Open questions** after **go**, per `[run] open_questions`:
 
-- `park` (default): label the ticket `needs-info` (or the repo's equivalent), write the question on it; tickets it blocks wait, the rest continue. Listed in the final report.
-- `assume`: run a `council decide` round on it, record the answer as an ADR marked `assumed: confirm in retro`, continue.
+- `park` (default): mark the ticket as needing info, write the question on it; tickets it blocks wait, the rest continue. Listed in the final report.
+- `assume`: `council decide` round, record the answer as an ADR marked `assumed: confirm in retro`, continue.
 
 ## 3. Implement (AFK)
 
-Follow `engineering/implement-spec`, with council seats as its subagents:
-
-- **Integration branch** = `feature/<slug>` from the default branch. Push it.
-- **Implementer subagent** = an `[implement]` seat, one per frontier ticket, each in its own worktree on `ticket/<slug>-<n>` based on the feature branch. Brief: ticket pointer, spec pointer, "read and follow `engineering/tdd`", commit, merge the feature tip in, report. At most `[implement] parallel` at once.
-- **Exploration subagent** = `[research]` seats when a ticket needs it.
-- **Ticket review** (with `[review] per_ticket`): review seats read `git diff feature/<slug>...ticket/<slug>-<n>` from the main checkout (never the implementer's worktree) against `CODING_STANDARDS.md` and the ticket, following code review's two axes. Run the review gate (SKILL.md); fixes go back to the same implementer seat. Green → merge.
-- **Merger subagent** = `[implement] merger` seat: merges the ticket branch into the feature branch, resolves conflicts, runs `evals`, pushes. Then close the ticket the way the tracker does, and launch the next frontier.
-- A ticket stuck at `max_rounds`: label `needs-info` with the open findings, park its dependents, continue.
+- `feature/<slug>` from the default branch, pushed.
+- The **frontier** is every open ticket whose blockers are merged. For each, one `[implement]` seat in its own worktree on `ticket/<slug>-<n>` from the feature branch, at most `[implement] parallel` at once. Brief: ticket and spec pointers, test first at the agreed seams, run the checks, commit, merge the feature tip in, report.
+- `[research]` seats explore when a ticket needs it; findings go to a file the implementer is pointed at.
+- **Ticket review** (`[review] per_ticket`): review seats read `git diff feature/<slug>...ticket/<slug>-<n>` from the main checkout, never the implementer's worktree, against the repo's coding standards and the ticket. Run the review gate (SKILL.md); fixes go back to the same implementer seat.
+- Green → the `[implement] merger` seat merges into the feature branch, resolves conflicts, runs `evals`, pushes. Close the ticket the tracker's way; launch the new frontier.
+- Stuck at `max_rounds`: mark the ticket as needing info with the open findings, park its dependents, continue.
 
 ## 4. Feature PR (AFK)
 
-1. Open the PR `feature/<slug>` → default branch. Body per `engineering/pr` (Summary, Evidence, Merge Danger with **Door** one-way/two-way and **Blast Radius**), plus the council table.
+1. PR `feature/<slug>` → default branch. Body: what changed (smallest diagram or sketch that shows it), evidence (before/after, test runs), merge danger (**one-way or two-way door**, blast radius), the council table.
 2. Final review gate on the whole feature, fixed point = merge-base with the default branch, including `final_evals`.
 3. Wait for CI. Red CI is a blocker finding.
 
@@ -65,15 +86,15 @@ Follow `engineering/implement-spec`, with council seats as its subagents:
 Only what the default branch's `.council.toml` `[ship]` allows:
 
 - `merge = "ready"` (default): mark the PR ready, stop.
-- `merge = "auto"`: merge when the gate is green and CI is green. Never auto-merge when the diff touches `.council.toml`, or when the PR is a **one-way door** (migration, data deletion) unless `one_way = "auto"`: leave those ready.
-- `deploy = "ci"`: merging deploys; wait for that workflow and report its result. `deploy = "<command>"`: run it on the coordinator's machine after merge. Empty: no deploy.
-- `verify = "<command>"`: run after deploy. On failure run `rollback` if set, else stop. Report either way.
+- `merge = "auto"`: merge when the gate and CI are green. Never auto-merge a diff that touches `.council.toml`, or a **one-way door** (migration, data deletion) unless `one_way = "auto"`: leave those ready.
+- `deploy = "ci"`: merging deploys; wait for that run and report. `deploy = "<command>"`: run it after merge. Empty: no deploy.
+- `verify = "<command>"` after deploy. On failure run `rollback` if set, else stop. Report either way.
 
 Any denied merge, push or deploy: stop and report. Never work around it.
 
 ## 6. Retro (the user's)
 
-Write a **retro packet** as a comment on the spec issue and in your final message: spec, tickets, PR, terminal names per phase, findings per round (confirmed / rejected, with reasons), parked questions, `assumed` ADRs, absent or dropped seats, what shipped. The user runs `/retro` on it (Matt's `engineering/retro`); don't run it yourself.
+Post a **retro packet** with the spec (issue comment, or `.council/<slug>/retro.md` for `local`) and in the final message: spec, tickets, PR, terminal names per phase, findings per round (confirmed / rejected, with reasons), parked questions, `assumed` ADRs, absent or dropped seats, what shipped. The user runs their retro on it; don't run it yourself.
 
 ## Never
 
