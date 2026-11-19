@@ -1,12 +1,14 @@
 ---
 name: council
-description: Use before delegating any research, grill, implement or review work on a task, to pick which models do each phase from the project's .council.toml; and when the user says "council" or asks several models to weigh one decision. Skip only for plain questions with no task.
-argument-hint: "[plan | decide <question> | review <PR>]"
+description: Use before delegating any research, grill, implement or review work on a task, to pick which models do each phase from the project's .council.toml; for "council run" (attended grill, then unattended spec, tickets, implementation, review and opt-in deploy on Matt Pocock's skills); and when the user says "council" or asks several models to weigh one decision. Skip only for plain questions with no task.
+argument-hint: "[run <idea|issue> | plan | decide <question> | review <PR>]"
 ---
 
 # Council
 
 The council staffs tasks: for each phase (research, grill, implement, review) it picks which models do the work, following the config, then runs them. You (whichever agent runs this skill) are the coordinator: you pick, launch, check and synthesize. You are not a seat.
+
+**`council run`**: the full pipeline from grill to deploy. Read [pipeline.md](pipeline.md) and follow it; the sections below still define staffing, seats, the brief and the review gate. After the grill, hand off to an unattended coordinator on the dev machine so the run survives this session: `hc run --bg --on <machine> --outlive-parent --name cr-<slug>-coordinator --cwd Developer/<owner>/<repo> claude --model <[run] coordinator> -- "Use the council skill: council run, resume <spec issue> after go. Report with hc send <me> at each phase change and when done or stuck."` (needs this skill installed on that machine).
 
 ## 1. Read the config
 
@@ -16,7 +18,7 @@ Merge, later wins per key:
 2. `~/.config/council/council.toml` (user)
 3. `<repo>/.council.toml` (project)
 
-Keys per phase: `models` (how many seats; 0 = skip the phase), `prefer` (provider order). Review also: `exclude_implementer`, `max_rounds`, `gate`, `evals`, `final_evals`, `block_on`, `min_score`, `show_score` (see Review gate). `[seats.<provider>] model` pins a model. `[defaults]`: `distinct_providers`, `skip_trivial`. Unknown keys: say so once, ignore them.
+Keys per phase: `models` (how many seats; 0 = skip the phase), `prefer` (seat order). A seat is `provider` or `provider:model` (`claude:sonnet`, `codex:gpt-6.2-sol`). The provider counts for `distinct_providers` and `exclude_implementer`; the model only sets strength and cost. Without `:model`, use `[seats.<provider>] model`. Resolve short names through `[seats.<provider>] aliases`; `default` means pass no model flag; anything else passes through as a model ID. Review also: `exclude_implementer`, `max_rounds`, `gate`, `evals`, `final_evals`, `block_on`, `min_score`, `show_score` (see Review gate). `[seats.<provider>] model` pins a model. `[defaults]`: `distinct_providers`, `skip_trivial`. Unknown keys: say so once, ignore them.
 
 ## 2. Staff each phase
 
@@ -31,7 +33,7 @@ Show the plan in one table before launching, then proceed without waiting unless
 ```markdown
 | Phase | Seats | Machine |
 | --- | --- | --- |
-| research | Claude Opus, Gemini | mini-dev |
+| research | Claude Sonnet, Gemini | mini-dev |
 | grill | Grok | mini-dev |
 | implement | Claude Opus | mini-dev |
 | review | Codex, Grok | mini-dev |
@@ -63,9 +65,9 @@ Research, grill and review seats are read-only. Only implement seats edit, and o
 | Provider | Launch (`<task>` = the brief) | Notes |
 | --- | --- | --- |
 | claude | `claude --model <model> --disallowedTools Edit Write NotebookEdit Agent -- "<task>"` | Always pass `--model`. Implement seats drop `--disallowedTools`. Not `--permission-mode plan`: it stops at a plan-approval prompt. |
-| codex | `codex --no-daemon -s read-only "<task>"` | Implement: `-s workspace-write`. Read-only blocks `hc send`: collect with `hc read`. |
-| grok | `grok "<task>"` | Read-only by instruction only. First launch in a folder: trust dialog, ask the user to accept (`hc attach <machine>/<name>`). |
-| gemini | `agy --mode auto --sandbox --model <model> -i "<task>"` | Model `best` = strongest Gemini in `agy models` (Pro if listed, else `gemini-3.8-flash-high`); never its Claude/GPT models. Works on homer and mini-dev. On cyclone-dev auto mode is missing, so every command asks permission: run this seat on mini-dev instead. |
+| codex | `codex --no-daemon -s read-only [-m <model>] "<task>"` | Implement: `-s workspace-write`. Read-only blocks `hc send`: collect with `hc read`. |
+| grok | `grok [-m <model>] "<task>"` | Read-only by instruction only. First launch in a folder: trust dialog, ask the user to accept (`hc attach <machine>/<name>`). |
+| gemini | `agy --mode auto --sandbox --model <model> -i "<task>"` | Models via `[seats.gemini] aliases` (default `neon` = `gemini-4-neon-high`; `neon-xhigh`, `hydrogen`, `carbon`, `argon`, `flash`); never its Claude/GPT models. Works on homer and mini-dev. On cyclone-dev auto mode is missing, so every command asks permission: run this seat on mini-dev instead. |
 
 A seat is unavailable when its CLI is missing, not signed in, or fails to start: report **absent: <reason>**.
 
